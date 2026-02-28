@@ -28,17 +28,19 @@ async def get_current_user_id(request: Request) -> int:
 
 @router.get("/")
 async def list_journal_entries(
+    page: int = 1,
+    page_size: int = 10,
     je_service: JournalEntryService = Depends(get_journal_entry_service),
 ):
-    entries = await je_service.get_journal_entries()
+    entries = await je_service.get_journal_entries(page, page_size)
 
     data = []
-    for entry in entries:
+    for entry in entries["results"]:
         je_dict = entry.model_dump()
         je_dict["lines"] = [line.model_dump() for line in entry.lines]
         data.append(je_dict)
 
-    return response(200, "Journal entries retrieved successfully", data)
+    return response(200, "Journal entries retrieved successfully", data={"results": data, "page_info": entries["meta"]})
 
 
 @router.post("/")

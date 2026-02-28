@@ -6,7 +6,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.core.config import Config
 from src.core.database import connect_to_db, disconnect_from_db
-from src.core.errors import create_exception_handler, SendSculptException, BadRequest
+from src.core.errors import create_exception_handler, VerifineException, BadRequest
 from src.routes.routes import api_router
 from src.utils.common import response
 
@@ -45,7 +45,7 @@ app.add_exception_handler(
     RequestValidationError, create_exception_handler(422, "Validation Error")
 )
 app.add_exception_handler(
-    SendSculptException, create_exception_handler(400, "Bad Request")
+    VerifineException, create_exception_handler(400, "Bad Request")
 )
 # Map standard HTTP exceptions directly to ensure identical output formats
 app.add_exception_handler(HTTPException, create_exception_handler(400, "Bad Request"))

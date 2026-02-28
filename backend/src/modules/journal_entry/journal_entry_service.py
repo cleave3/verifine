@@ -4,26 +4,36 @@ from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 from sqlalchemy.orm import selectinload
-
+from sqlalchemy import func
 from src.core.database import get_session
 from src.models.journal_entry import JournalEntry, LedgerLine, JournalEntryStatus
 from src.models.fiscal_period import FiscalPeriod, PeriodStatus
 from src.modules.journal_entry.journal_entry_schema import JournalEntryCreate
 from src.core.errors import BadRequest
+from src.utils.common import get_pagination_meta
 
 
 class JournalEntryService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_journal_entries(self) -> Sequence[JournalEntry]:
+    async def get_journal_entries(
+        self, page: int = 1, page_size: int = 10
+    ):
         statement = (
             select(JournalEntry)
             .options(selectinload(JournalEntry.lines))
             .order_by(JournalEntry.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
         results = await self.session.exec(statement)
-        return results.all()
+        
+        total_statement = select(func.count(JournalEntry.id))
+        total_result = await self.session.exec(total_statement)
+        total_records = total_result.first()
+        
+        return {"results": results.all(), "meta": get_pagination_meta(page, page_size, total_records)}
 
     async def get_journal_entry_by_id(self, je_id: int) -> Optional[JournalEntry]:
         statement = (

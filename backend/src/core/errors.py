@@ -4,11 +4,11 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
 
-class SendSculptException(Exception):
+class VerifineException(Exception):
     pass
 
 
-class BadRequest(SendSculptException):
+class BadRequest(VerifineException):
     pass
 
 
