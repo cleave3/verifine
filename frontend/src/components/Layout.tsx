@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon } from "lucide-react";
+import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon, Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
 
@@ -13,6 +13,10 @@ export default function Layout() {
         await logout();
         navigate("/login");
     };
+
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
     const [isDarkMode, setIsDarkMode] = useState(() => {
         if (typeof window !== 'undefined') {
@@ -45,42 +49,57 @@ export default function Layout() {
         }`;
 
     return (
-        <div className="flex h-screen bg-gray-50 dark:bg-slate-900 font-sans transition-colors">
+        <div className="flex h-screen bg-gray-50 dark:bg-slate-900 font-sans transition-colors overflow-hidden">
+
+            {/* Mobile Overlay */}
+            {isMobileMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm transition-opacity"
+                    onClick={closeMobileMenu}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0">
-                <div className="h-16 flex items-center px-6 bg-slate-950">
+            <aside className={`
+                fixed md:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 transform transition-transform duration-300 ease-in-out
+                ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            `}>
+                <div className="h-16 flex items-center justify-between px-6 bg-slate-950">
                     <span className="text-xl font-bold text-white tracking-wide">VERIFINE</span>
+                    <button onClick={closeMobileMenu} className="md:hidden text-slate-400 hover:text-white">
+                        <X className="w-5 h-5" />
+                    </button>
                 </div>
-                <div className="flex-1 overflow-y-auto py-4">
+                <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
                     <nav className="space-y-1 px-3">
-                        <Link to="/" className={linkClass("/")}>
+                        <Link to="/" onClick={closeMobileMenu} className={linkClass("/")}>
                             <LayoutDashboard className={iconClass("/")} />
                             Dashboard
                         </Link>
-                        <Link to="/accounts" className={linkClass("/accounts")}>
+                        <Link to="/accounts" onClick={closeMobileMenu} className={linkClass("/accounts")}>
                             <BookOpen className={iconClass("/accounts")} />
                             Chart of Accounts
                         </Link>
-                        <Link to="/periods" className={linkClass("/periods")}>
+                        <Link to="/periods" onClick={closeMobileMenu} className={linkClass("/periods")}>
                             <Calendar className={iconClass("/periods")} />
                             Fiscal Periods
                         </Link>
-                        <Link to="/journal-entries" className={linkClass("/journal-entries")}>
+                        <Link to="/journal-entries" onClick={closeMobileMenu} className={linkClass("/journal-entries")}>
                             <BookOpen className={iconClass("/journal-entries")} />
                             General Ledger
                         </Link>
-                        <Link to="/reports" className={linkClass("/reports")}>
+                        <Link to="/reports" onClick={closeMobileMenu} className={linkClass("/reports")}>
                             <BarChart3 className={iconClass("/reports")} />
                             Reports
                         </Link>
 
                         <div className="pt-4 mt-2 border-t border-slate-700/50">
                             <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Accounts Payable</p>
-                            <Link to="/ap/vendors" className={linkClass("/ap/vendors")}>
+                            <Link to="/ap/vendors" onClick={closeMobileMenu} className={linkClass("/ap/vendors")}>
                                 <Users className={iconClass("/ap/vendors")} />
                                 Vendors
                             </Link>
-                            <Link to="/ap/bills" className={linkClass("/ap/bills")}>
+                            <Link to="/ap/bills" onClick={closeMobileMenu} className={linkClass("/ap/bills")}>
                                 <BookOpen className={iconClass("/ap/bills")} />
                                 Bills
                             </Link>
@@ -88,11 +107,11 @@ export default function Layout() {
 
                         <div className="pt-4 mt-2 border-t border-slate-700/50">
                             <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Accounts Receivable</p>
-                            <Link to="/ar/customers" className={linkClass("/ar/customers")}>
+                            <Link to="/ar/customers" onClick={closeMobileMenu} className={linkClass("/ar/customers")}>
                                 <Users className={iconClass("/ar/customers")} />
                                 Customers
                             </Link>
-                            <Link to="/ar/invoices" className={linkClass("/ar/invoices")}>
+                            <Link to="/ar/invoices" onClick={closeMobileMenu} className={linkClass("/ar/invoices")}>
                                 <BookOpen className={iconClass("/ar/invoices")} />
                                 Invoices
                             </Link>
@@ -100,7 +119,7 @@ export default function Layout() {
 
                         <div className="pt-4 mt-2 border-t border-slate-700/50">
                             <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">System</p>
-                            <Link to="/settings" className={linkClass("/settings")}>
+                            <Link to="/settings" onClick={closeMobileMenu} className={linkClass("/settings")}>
                                 <SettingsIcon className={iconClass("/settings")} />
                                 Settings
                             </Link>
@@ -128,14 +147,22 @@ export default function Layout() {
             </aside>
 
             {/* Main content */}
-            <main className="flex-1 overflow-y-auto w-full flex flex-col">
-                <header className="bg-white dark:bg-slate-950 shadow-sm h-16 flex items-center justify-between px-8 shrink-0 transition-colors">
-                    <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
-                        Accounting Suite Workspace
-                    </h1>
+            <main className="flex-1 overflow-y-auto w-full flex flex-col min-w-0">
+                <header className="bg-white dark:bg-slate-950 shadow-sm h-16 flex items-center justify-between px-4 sm:px-8 shrink-0 transition-colors">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => setIsMobileMenuOpen(true)}
+                            className="p-2 -ml-2 rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 md:hidden transition-colors"
+                        >
+                            <Menu className="w-5 h-5" />
+                        </button>
+                        <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100 truncate">
+                            Workspace
+                        </h1>
+                    </div>
                     <button
                         onClick={toggleTheme}
-                        className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+                        className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors shrink-0"
                         aria-label="Toggle theme"
                     >
                         {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}

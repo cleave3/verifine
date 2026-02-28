@@ -72,9 +72,9 @@ export default function Dashboard() {
     const isProfitable = (stats?.current_period_net_income || 0) >= 0;
 
     return (
-        <div className="mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-full">
             {/* Header */}
-            <div className="mb-8">
+            <div className="mb-6 sm:mb-8">
                 <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Financial Overview</h1>
                 <p className="text-slate-500 dark:text-slate-400 mt-2">Real-time pulse of your organizational health and liquidity.</p>
             </div>
@@ -157,16 +157,17 @@ export default function Dashboard() {
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart
                                 data={chart_data}
-                                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                                margin={{ top: 20, right: 10, left: 0, bottom: 5 }}
                             >
                                 <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" strokeOpacity={0.2} vertical={false} />
-                                <XAxis dataKey="name" stroke="#64748b" tick={{ fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                <XAxis dataKey="name" stroke="#64748b" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
                                 <YAxis
                                     stroke="#64748b"
-                                    tick={{ fill: '#64748b' }}
+                                    tick={{ fill: '#64748b', fontSize: 12 }}
                                     axisLine={false}
                                     tickLine={false}
                                     tickFormatter={(val) => `₦${val / 1000}k`}
+                                    width={45}
                                 />
                                 <RechartsTooltip
                                     cursor={{ fill: 'rgba(226, 232, 240, 0.5)' }}
@@ -182,7 +183,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Recent Activity */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 flex flex-col">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 flex flex-col max-h-[500px]">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center justify-between">
                         <span className="flex items-center">
                             <Activity className="h-5 w-5 mr-2 text-fuchsia-500 dark:text-fuchsia-400" />

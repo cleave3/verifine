@@ -105,46 +105,46 @@ export default function Bills() {
             {isLoading ? (
                 <div className="text-slate-500 animate-pulse">Loading bills...</div>
             ) : (
-                <div className="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                <div className="bg-white dark:bg-slate-800 shadow rounded-lg overflow-x-auto border border-slate-200 dark:border-slate-700">
                     <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
                         <thead className="bg-slate-50 dark:bg-slate-900">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Bill #</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Vendor</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Amount</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Action</th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Bill #</th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Vendor</th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Amount</th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Action</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
                             {bills.map((b: any) => (
                                 <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">{b.bill_number}</td>
-                                    <td className="px-6 py-4 text-sm font-medium text-indigo-600 dark:text-indigo-400">{getVendorName(b.vendor_id)}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{format(new Date(b.bill_date), 'MMM d, yyyy')}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                                    <td className="px-4 sm:px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">{b.bill_number}</td>
+                                    <td className="px-4 sm:px-6 py-4 text-sm font-medium text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{getVendorName(b.vendor_id)}</td>
+                                    <td className="px-4 sm:px-6 py-4 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">{format(new Date(b.bill_date), 'MMM d, yyyy')}</td>
+                                    <td className="px-4 sm:px-6 py-4 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                         {new Intl.NumberFormat('en-NG', { style: 'currency', currency: b.currency_code || baseCurrency }).format(b.total_amount)}
                                     </td>
-                                    <td className="px-6 py-4 text-sm">
+                                    <td className="px-4 sm:px-6 py-4 text-sm">
                                         <span className={`px-2 py-1 text-xs font-semibold rounded-full uppercase ${b.status === 'APPROVED' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-800'}`}>
                                             {b.status}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-sm">
+                                    <td className="px-4 sm:px-6 py-4 text-sm flex gap-2 flex-wrap min-w-[120px]">
                                         {b.status === 'DRAFT' && (
-                                            <button onClick={() => setConfirmAction({ type: 'APPROVE', id: b.id })} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-medium whitespace-nowrap">Approve</button>
+                                            <button onClick={() => setConfirmAction({ type: 'APPROVE', id: b.id })} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-medium whitespace-nowrap bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded">Approve</button>
                                         )}
                                         {b.status === 'APPROVED' && (
-                                            <button onClick={() => setConfirmAction({ type: 'POST', id: b.id })} className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300 font-medium whitespace-nowrap">Post to GL</button>
+                                            <button onClick={() => setConfirmAction({ type: 'POST', id: b.id })} className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300 font-medium whitespace-nowrap bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded">Post to GL</button>
                                         )}
                                         {b.status === 'POSTED' && (
-                                            <button onClick={() => setConfirmAction({ type: 'PAY', id: b.id })} className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 font-medium whitespace-nowrap">Mark Paid</button>
+                                            <button onClick={() => setConfirmAction({ type: 'PAY', id: b.id })} className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 font-medium whitespace-nowrap bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded">Mark Paid</button>
                                         )}
                                     </td>
                                 </tr>
                             ))}
-                            {bills.length === 0 && <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">No bills found.</td></tr>}
+                            {bills.length === 0 && <tr><td colSpan={6} className="px-4 sm:px-6 py-8 text-center text-slate-500">No bills found.</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -152,10 +152,10 @@ export default function Bills() {
 
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-4 sm:p-6 w-full sm:w-[95%] md:max-w-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Enter Bill</h2>
                         <form onSubmit={form.handleSubmit((d: any) => createMutation.mutate(d))} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Vendor</label>
                                     <select {...form.register("vendor_id")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
@@ -179,7 +179,7 @@ export default function Bills() {
                                     <input type="date" {...form.register("due_date")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Bill Number</label>
                                     <input {...form.register("bill_number")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
@@ -189,7 +189,7 @@ export default function Bills() {
                                     <input {...form.register("description")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Currency</label>
                                     <select {...form.register("currency_code")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
@@ -200,7 +200,7 @@ export default function Bills() {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Base Equivalent ({baseCurrency})</label>
-                                    <div className="mt-1 p-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-md border border-slate-200 dark:border-slate-700 font-semibold opacity-80">
+                                    <div className="mt-1 p-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-md border border-slate-200 dark:border-slate-700 font-semibold opacity-80 overflow-x-auto whitespace-nowrap">
                                         {new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(baseTotal)}
                                     </div>
                                 </div>
@@ -211,16 +211,20 @@ export default function Bills() {
                                     <h3 className="text-sm font-bold text-slate-800 dark:text-white">Expenses/Items</h3>
                                     <button type="button" onClick={() => append({ account_id: 0, amount: 0, description: "" })} className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">+ Add Line</button>
                                 </div>
-                                {fields.map((field, index) => (
-                                    <div key={field.id} className="flex gap-2 items-center mb-2">
-                                        <select {...form.register(`lines.${index}.account_id`)} className="flex-1 min-w-[150px] border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
-                                            <option value={0}>Expense Account</option>
-                                            {accounts.map((a: any) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
-                                        </select>
-                                        <input type="number" step="0.01" placeholder="Amount" {...form.register(`lines.${index}.amount`)} className="w-32 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
-                                        <button type="button" onClick={() => remove(index)} className="text-rose-500 px-2 font-bold">✕</button>
+                                <div className="overflow-x-auto pb-4">
+                                    <div className="min-w-[400px]">
+                                        {fields.map((field, index) => (
+                                            <div key={field.id} className="flex gap-2 items-center mb-2">
+                                                <select {...form.register(`lines.${index}.account_id`)} className="flex-1 min-w-[150px] border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
+                                                    <option value={0}>Expense Account</option>
+                                                    {accounts.map((a: any) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
+                                                </select>
+                                                <input type="number" step="0.01" placeholder="Amount" {...form.register(`lines.${index}.amount`)} className="w-32 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
+                                                <button type="button" onClick={() => remove(index)} className="text-rose-500 px-2 font-bold shrink-0">✕</button>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
+                                </div>
                                 {form.formState.errors.lines?.root && <p className="text-rose-500 text-sm mt-2">{form.formState.errors.lines.root.message as string}</p>}
                             </div>
 
