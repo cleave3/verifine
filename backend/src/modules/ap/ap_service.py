@@ -1,8 +1,11 @@
 from typing import Sequence, Optional
 from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select
+from datetime import date
+from sqlmodel import func, select
 from sqlalchemy.orm import selectinload
+
+from src.utils.common import get_pagination_meta
 
 from src.core.database import get_session
 from src.models.vendor import Vendor
@@ -58,14 +61,49 @@ class BillService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_bills(self) -> Sequence[Bill]:
+    async def get_bills(
+        self,
+        page: int = 1,
+        page_size: int = 10,
+        status: Optional[BillStatus] = None,
+        vendor_id: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ):
         statement = (
             select(Bill)
             .options(selectinload(Bill.lines))
-            .order_by(Bill.bill_date.desc())
+            .order_by(Bill.bill_date.desc(), Bill.id.desc())
         )
+
+        total_statement = select(func.count(Bill.id))
+
+        if status:
+            statement = statement.where(Bill.status == status)
+            total_statement = total_statement.where(Bill.status == status)
+
+        if vendor_id:
+            statement = statement.where(Bill.vendor_id == vendor_id)
+            total_statement = total_statement.where(Bill.vendor_id == vendor_id)
+
+        if start_date:
+            statement = statement.where(Bill.bill_date >= start_date)
+            total_statement = total_statement.where(Bill.bill_date >= start_date)
+
+        if end_date:
+            statement = statement.where(Bill.bill_date <= end_date)
+            total_statement = total_statement.where(Bill.bill_date <= end_date)
+
+        statement = statement.offset((page - 1) * page_size).limit(page_size)
+
         results = await self.session.exec(statement)
-        return results.all()
+        total_result = await self.session.exec(total_statement)
+        total_records = total_result.first() or 0
+
+        return {
+            "results": results.all(),
+            "meta": get_pagination_meta(page, page_size, total_records),
+        }
 
     async def get_bill_by_id(self, bill_id: int) -> Optional[Bill]:
         statement = (
@@ -100,7 +138,11 @@ class BillService:
         await self.session.flush()
 
         for line_in in bill_in.lines:
-            base_amount = line_in.base_amount if line_in.base_amount is not None else round(line_in.amount * bill_in.exchange_rate, 4)
+            base_amount = (
+                line_in.base_amount
+                if line_in.base_amount is not None
+                else round(line_in.amount * bill_in.exchange_rate, 4)
+            )
             db_line = BillLineItem(
                 bill_id=db_bill.id,
                 account_id=line_in.account_id,

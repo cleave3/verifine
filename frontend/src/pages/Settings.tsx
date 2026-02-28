@@ -81,7 +81,7 @@ export default function Settings() {
     if (isLoading) return <div className="p-6 text-slate-500">Loading settings...</div>;
 
     return (
-        <div className="p-6 max-w-4xl mx-auto">
+        <div className="p-6 mx-auto">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-gray-100 mb-6">Company Settings</h1>
 
             <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-slate-200 dark:border-slate-700">

@@ -48,17 +48,41 @@ async def update_customer(
 
 
 # --- INVOICES ---
+from datetime import date
+from typing import Optional
+from src.models.invoice import InvoiceStatus
+
+
 @router.get("/invoices")
-async def list_invoices(invoice_service: InvoiceService = Depends(get_invoice_service)):
-    invoices = await invoice_service.get_invoices()
+async def list_invoices(
+    page: int = 1,
+    page_size: int = 10,
+    status: Optional[InvoiceStatus] = None,
+    customer_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    invoice_service: InvoiceService = Depends(get_invoice_service),
+):
+    invoices = await invoice_service.get_invoices(
+        page=page,
+        page_size=page_size,
+        status=status,
+        customer_id=customer_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
     data = []
-    for invoice in invoices:
+    for invoice in invoices["results"]:
         inv_dict = invoice.model_dump()
         inv_dict["lines"] = [line.model_dump() for line in invoice.lines]
         data.append(inv_dict)
 
-    return response(200, "Invoices retrieved successfully", data)
+    return response(
+        200,
+        "Invoices retrieved successfully",
+        {"results": data, "page_info": invoices["meta"]},
+    )
 
 
 @router.post("/invoices")

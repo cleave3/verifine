@@ -45,17 +45,41 @@ async def update_vendor(
 
 
 # --- BILLS ---
+from datetime import date
+from typing import Optional
+from src.models.bill import BillStatus
+
+
 @router.get("/bills")
-async def list_bills(bill_service: BillService = Depends(get_bill_service)):
-    bills = await bill_service.get_bills()
+async def list_bills(
+    page: int = 1,
+    page_size: int = 10,
+    status: Optional[BillStatus] = None,
+    vendor_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    bill_service: BillService = Depends(get_bill_service),
+):
+    bills = await bill_service.get_bills(
+        page=page,
+        page_size=page_size,
+        status=status,
+        vendor_id=vendor_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
     data = []
-    for bill in bills:
+    for bill in bills["results"]:
         bill_dict = bill.model_dump()
         bill_dict["lines"] = [line.model_dump() for line in bill.lines]
         data.append(bill_dict)
 
-    return response(200, "Bills retrieved successfully", data)
+    return response(
+        200,
+        "Bills retrieved successfully",
+        {"results": data, "page_info": bills["meta"]},
+    )
 
 
 @router.post("/bills")

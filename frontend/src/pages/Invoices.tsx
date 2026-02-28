@@ -3,10 +3,11 @@ import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import api from "../lib/axios";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useCurrencyStore } from "../store/currencyStore";
+import { ChevronLeft, ChevronRight, Filter } from "lucide-react";
 
 const invoiceSchema = z.object({
     customer_id: z.coerce.number().min(1),
@@ -30,13 +31,37 @@ export default function Invoices() {
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [confirmAction, setConfirmAction] = useState<{ type: 'SEND' | 'POST' | 'PAY', id: number } | null>(null);
+    const [page, setPage] = useState(1);
 
-    const { data: invRes, isLoading } = useQuery({ queryKey: ["invoices"], queryFn: async () => (await api.get("/ar/invoices/")).data });
+    // Filtering State
+    const [statusFilter, setStatusFilter] = useState("");
+    const [customerFilter, setCustomerFilter] = useState("");
+    const [dateRangeType, setDateRangeType] = useState("this-month");
+    const [customStartDate, setCustomStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"));
+    const [customEndDate, setCustomEndDate] = useState(format(endOfMonth(new Date()), "yyyy-MM-dd"));
+
+    const startDate = dateRangeType === "this-month" ? format(startOfMonth(new Date()), "yyyy-MM-dd") : customStartDate;
+    const endDate = dateRangeType === "this-month" ? format(endOfMonth(new Date()), "yyyy-MM-dd") : customEndDate;
+
+    const { data: invRes, isLoading } = useQuery({
+        queryKey: ["invoices", page, statusFilter, customerFilter, startDate, endDate],
+        queryFn: async () => (await api.get("/ar/invoices/", {
+            params: {
+                page,
+                page_size: 10,
+                status: statusFilter || undefined,
+                customer_id: customerFilter || undefined,
+                start_date: startDate,
+                end_date: endDate
+            }
+        })).data
+    });
     const { data: custRes } = useQuery({ queryKey: ["customers"], queryFn: async () => (await api.get("/ar/customers/")).data });
     const { data: accRes } = useQuery({ queryKey: ["accounts"], queryFn: async () => (await api.get("/accounts/")).data });
     const { data: perRes } = useQuery({ queryKey: ["periods"], queryFn: async () => (await api.get("/periods/")).data });
 
-    const invoices = invRes?.data || [];
+    const invoices = invRes?.data?.results || [];
+    const pageInfo = invRes?.data?.page_info || { current_page: 1, page_count: 1, total_count: 0, is_first_page: true, is_last_page: true };
     const customers = custRes?.data || [];
 
     const getCustomerName = (id: number) => customers.find((c: any) => c.id === id)?.name || `ID: ${id}`;
@@ -102,6 +127,92 @@ export default function Invoices() {
                 </button>
             </div>
 
+            {/* Filters */}
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 mb-6">
+                <div className="flex items-center gap-2 mb-3 text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-100 dark:border-slate-700 pb-2">
+                    <Filter className="w-4 h-4" />
+                    <span className="text-sm">Filter Invoices</span>
+                </div>
+                <div className="flex flex-wrap gap-4 items-end">
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                            className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <option value="">All Statuses</option>
+                            <option value="DRAFT">Draft</option>
+                            <option value="SENT">Sent</option>
+                            <option value="POSTED">Posted</option>
+                            <option value="PAID">Paid</option>
+                            <option value="VOIDED">Voided</option>
+                        </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Customer</label>
+                        <select
+                            value={customerFilter}
+                            onChange={(e) => { setCustomerFilter(e.target.value); setPage(1); }}
+                            className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 min-w-[200px]"
+                        >
+                            <option value="">All Customers</option>
+                            {customers.map((c: any) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Date Range</label>
+                        <select
+                            value={dateRangeType}
+                            onChange={(e) => { setDateRangeType(e.target.value); setPage(1); }}
+                            className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <option value="this-month">This Month</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                    </div>
+
+                    {dateRangeType === "custom" && (
+                        <>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-slate-500 uppercase">Start Date</label>
+                                <input
+                                    type="date"
+                                    value={customStartDate}
+                                    onChange={(e) => { setCustomStartDate(e.target.value); setPage(1); }}
+                                    className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-slate-500 uppercase">End Date</label>
+                                <input
+                                    type="date"
+                                    value={customEndDate}
+                                    onChange={(e) => { setCustomEndDate(e.target.value); setPage(1); }}
+                                    className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    <button
+                        onClick={() => {
+                            setStatusFilter("");
+                            setCustomerFilter("");
+                            setDateRangeType("this-month");
+                            setPage(1);
+                        }}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 font-medium pb-2 hover:underline"
+                    >
+                        Clear Filters
+                    </button>
+                </div>
+            </div>
+
             {isLoading ? (
                 <div className="text-slate-500 animate-pulse">Loading invoices...</div>
             ) : (
@@ -147,6 +258,32 @@ export default function Invoices() {
                             {invoices.length === 0 && <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">No invoices found.</td></tr>}
                         </tbody>
                     </table>
+
+                    {/* Pagination */}
+                    <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                            Showing <span className="font-medium text-slate-900 dark:text-white">{invoices.length}</span> of <span className="font-medium text-slate-900 dark:text-white">{pageInfo.total_count}</span> invoices
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={pageInfo.is_first_page}
+                                className="p-2 rounded border border-slate-300 dark:border-slate-700 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-900 transition"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Page {pageInfo.current_page} of {pageInfo.page_count}
+                            </span>
+                            <button
+                                onClick={() => setPage(p => Math.min(pageInfo.page_count, p + 1))}
+                                disabled={pageInfo.is_last_page}
+                                className="p-2 rounded border border-slate-300 dark:border-slate-700 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-900 transition"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
