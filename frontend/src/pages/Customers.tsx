@@ -1,0 +1,125 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import api from "../lib/axios";
+
+const custSchema = z.object({
+    name: z.string().min(2),
+    contact_name: z.string().optional(),
+    email: z.string().email().optional().or(z.literal("")),
+    phone: z.string().optional(),
+    payment_terms_days: z.coerce.number().min(0).default(30),
+});
+type CustFormValues = z.infer<typeof custSchema>;
+
+export default function Customers() {
+    const queryClient = useQueryClient();
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const { data: qRes, isLoading } = useQuery({
+        queryKey: ["customers"],
+        queryFn: async () => {
+            const { data } = await api.get("/ar/customers/");
+            return data;
+        },
+    });
+
+    const items = qRes?.data || [];
+
+    const createMutation = useMutation({
+        mutationFn: async (payload: CustFormValues) => {
+            return await api.post("/ar/customers/", payload);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["customers"] });
+            setIsModalOpen(false);
+            form.reset();
+        },
+    });
+
+    const form = useForm<CustFormValues>({
+        resolver: zodResolver(custSchema),
+        defaultValues: { name: "", contact_name: "", email: "", phone: "", payment_terms_days: 30 },
+    });
+
+    const onSubmit = (data: CustFormValues) => createMutation.mutate(data);
+
+    return (
+        <div className="p-6">
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-gray-100">Customers Directory</h1>
+                <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
+                    + Add Customer
+                </button>
+            </div>
+
+            {isLoading ? (
+                <div className="text-slate-500 animate-pulse">Loading customers...</div>
+            ) : (
+                <div className="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                    <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                        <thead className="bg-slate-50 dark:bg-slate-900">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Customer Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Contact</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Email</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Terms</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
+                            {items.map((v: any) => (
+                                <tr key={v.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                    <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">{v.name}</td>
+                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{v.contact_name || "-"}</td>
+                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{v.email || "-"}</td>
+                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">Net {v.payment_terms_days}</td>
+                                </tr>
+                            ))}
+                            {items.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
+                                        No customers configured.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-md shadow-2xl">
+                        <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Add Customer</h2>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Name</label>
+                                <input {...form.register("name")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Contact Person</label>
+                                <input {...form.register("contact_name")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email Address</label>
+                                <input type="email" {...form.register("email")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Payment Terms (Days)</label>
+                                <input type="number" {...form.register("payment_terms_days")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
+                            </div>
+                            <div className="flex justify-end gap-3 mt-6">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Cancel</button>
+                                <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">
+                                    {createMutation.isPending ? "Saving..." : "Save"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

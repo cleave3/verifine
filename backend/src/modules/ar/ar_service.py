@@ -1,0 +1,214 @@
+from typing import Sequence, Optional
+from fastapi import Depends
+from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import select
+from sqlalchemy.orm import selectinload
+
+from src.core.database import get_session
+from src.models.customer import Customer
+from src.models.invoice import Invoice, InvoiceLineItem, InvoiceStatus
+from src.models.account import Account
+from src.models.fiscal_period import FiscalPeriod, PeriodStatus
+from src.modules.ar.ar_schema import CustomerCreate, CustomerUpdate, InvoiceCreate
+from src.modules.journal_entry.journal_entry_schema import (
+    JournalEntryCreate,
+    LedgerLineCreate,
+)
+from src.modules.journal_entry.journal_entry_service import JournalEntryService
+from src.core.errors import BadRequest
+
+
+class CustomerService:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_customers(self) -> Sequence[Customer]:
+        statement = select(Customer).order_by(Customer.name)
+        results = await self.session.exec(statement)
+        return results.all()
+
+    async def get_customer_by_id(self, customer_id: int) -> Optional[Customer]:
+        return await self.session.get(Customer, customer_id)
+
+    async def create_customer(self, customer_in: CustomerCreate) -> Customer:
+        db_customer = Customer(**customer_in.model_dump())
+        self.session.add(db_customer)
+        await self.session.commit()
+        await self.session.refresh(db_customer)
+        return db_customer
+
+    async def update_customer(
+        self, customer_id: int, customer_in: CustomerUpdate
+    ) -> Optional[Customer]:
+        db_customer = await self.get_customer_by_id(customer_id)
+        if not db_customer:
+            return None
+
+        update_data = customer_in.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_customer, key, value)
+
+        self.session.add(db_customer)
+        await self.session.commit()
+        await self.session.refresh(db_customer)
+        return db_customer
+
+
+class InvoiceService:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_invoices(self) -> Sequence[Invoice]:
+        statement = (
+            select(Invoice)
+            .options(selectinload(Invoice.lines))
+            .order_by(Invoice.invoice_date.desc())
+        )
+        results = await self.session.exec(statement)
+        return results.all()
+
+    async def get_invoice_by_id(self, invoice_id: int) -> Optional[Invoice]:
+        statement = (
+            select(Invoice)
+            .where(Invoice.id == invoice_id)
+            .options(selectinload(Invoice.lines))
+        )
+        result = await self.session.exec(statement)
+        return result.first()
+
+    async def create_invoice(self, invoice_in: InvoiceCreate) -> Invoice:
+        # Verify Customer
+        customer = await self.session.get(Customer, invoice_in.customer_id)
+        if not customer:
+            raise BadRequest("Invalid customer ID")
+
+        total_amount = sum(line.amount for line in invoice_in.lines)
+
+        db_invoice = Invoice(
+            customer_id=invoice_in.customer_id,
+            invoice_number=invoice_in.invoice_number,
+            invoice_date=invoice_in.invoice_date,
+            due_date=invoice_in.due_date,
+            notes=invoice_in.notes,
+            status=InvoiceStatus.DRAFT,
+            total_amount=total_amount,
+        )
+        self.session.add(db_invoice)
+        await self.session.flush()
+
+        for line_in in invoice_in.lines:
+            db_line = InvoiceLineItem(
+                invoice_id=db_invoice.id,
+                account_id=line_in.account_id,
+                description=line_in.description,
+                amount=line_in.amount,
+            )
+            self.session.add(db_line)
+
+        await self.session.commit()
+        return await self.get_invoice_by_id(db_invoice.id)
+
+    async def mark_sent(self, invoice_id: int) -> Optional[Invoice]:
+        db_invoice = await self.get_invoice_by_id(invoice_id)
+        if not db_invoice:
+            return None
+
+        if db_invoice.status != InvoiceStatus.DRAFT:
+            raise BadRequest(
+                f"Cannot mark invoice as sent from status {db_invoice.status}"
+            )
+
+        db_invoice.status = InvoiceStatus.SENT
+        self.session.add(db_invoice)
+        await self.session.commit()
+        return db_invoice
+
+    async def post_invoice(self, invoice_id: int, user_id: int) -> Optional[Invoice]:
+        db_invoice = await self.get_invoice_by_id(invoice_id)
+        if not db_invoice:
+            return None
+
+        if db_invoice.status not in [InvoiceStatus.DRAFT, InvoiceStatus.SENT]:
+            raise BadRequest(
+                "Only DRAFT or SENT invoices can be posted to the general ledger."
+            )
+
+        # 1. Find AR Account (assumed to be 1200 - Accounts Receivable)
+        stmt = select(Account).where(Account.code == "1200")
+        ar_act = (await self.session.exec(stmt)).first()
+        if not ar_act:
+            raise BadRequest("Accounts Receivable account (1200) not found.")
+
+        # 2. Find Open Period
+        stmt = select(FiscalPeriod).where(FiscalPeriod.status == PeriodStatus.OPEN)
+        period = (await self.session.exec(stmt)).first()
+        if not period:
+            raise BadRequest("No OPEN fiscal period found to post to.")
+
+        # 3. Formulate Ledger Lines (Debit AR, Credit Revenue lines)
+        ledger_lines = []
+
+        # Debits AR
+        ledger_lines.append(
+            LedgerLineCreate(
+                account_id=ar_act.id,
+                debit=db_invoice.total_amount,
+                credit=0.0,
+                description=f"Invoice Output - {db_invoice.invoice_number}",
+            )
+        )
+
+        # Credits Revenue/Income accounts
+        for line in db_invoice.lines:
+            ledger_lines.append(
+                LedgerLineCreate(
+                    account_id=line.account_id,
+                    debit=0.0,
+                    credit=line.amount,
+                    description=line.description,
+                )
+            )
+
+        # 4. Generate Journal Entry
+        je_create = JournalEntryCreate(
+            description=f"Automated Entry for Invoice {db_invoice.invoice_number}",
+            entry_date=db_invoice.invoice_date,
+            period_id=period.id,
+            lines=ledger_lines,
+        )
+
+        je_service = JournalEntryService(self.session)
+        je = await je_service.create_journal_entry(je_create, user_id)
+
+        # 5. Link and Update Invoice Status
+        db_invoice.journal_entry_id = je.id
+        db_invoice.status = InvoiceStatus.POSTED
+        self.session.add(db_invoice)
+        await self.session.commit()
+
+        return db_invoice
+
+    async def mark_paid(self, invoice_id: int) -> Optional[Invoice]:
+        db_invoice = await self.get_invoice_by_id(invoice_id)
+        if not db_invoice:
+            return None
+
+        if db_invoice.status != InvoiceStatus.POSTED:
+            raise BadRequest(
+                f"Cannot mark invoice as paid from status {db_invoice.status}. Only POSTED invoices can be paid."
+            )
+
+        db_invoice.status = InvoiceStatus.PAID
+        self.session.add(db_invoice)
+        await self.session.commit()
+        return db_invoice
+
+
+def get_customer_service(
+    session: AsyncSession = Depends(get_session),
+) -> CustomerService:
+    return CustomerService(session=session)
+
+
+def get_invoice_service(session: AsyncSession = Depends(get_session)) -> InvoiceService:
+    return InvoiceService(session=session)
