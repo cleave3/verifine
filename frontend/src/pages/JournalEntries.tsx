@@ -3,10 +3,10 @@ import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import api from "../lib/axios";
 import { exportToCsv } from "../lib/export";
-import { Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 
 const jeSchema = z.object({
     description: z.string().min(3),
@@ -32,9 +32,26 @@ export default function JournalEntries() {
     const [selectedEntry, setSelectedEntry] = useState<any>(null);
     const [page, setPage] = useState(1);
 
+    // Filtering State
+    const [statusFilter, setStatusFilter] = useState("");
+    const [dateRangeType, setDateRangeType] = useState("this-month");
+    const [customStartDate, setCustomStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"));
+    const [customEndDate, setCustomEndDate] = useState(format(endOfMonth(new Date()), "yyyy-MM-dd"));
+
+    const startDate = dateRangeType === "this-month" ? format(startOfMonth(new Date()), "yyyy-MM-dd") : customStartDate;
+    const endDate = dateRangeType === "this-month" ? format(endOfMonth(new Date()), "yyyy-MM-dd") : customEndDate;
+
     const { data: jeRes, isLoading } = useQuery({
-        queryKey: ["journal-entries", page],
-        queryFn: async () => (await api.get("/journal-entries/", { params: { page, page_size: 10 } })).data
+        queryKey: ["journal-entries", page, statusFilter, startDate, endDate],
+        queryFn: async () => (await api.get("/journal-entries/", {
+            params: {
+                page,
+                page_size: 10,
+                status: statusFilter || undefined,
+                start_date: startDate,
+                end_date: endDate
+            }
+        })).data
     });
     const { data: accRes } = useQuery({
         queryKey: ["accounts"],
@@ -119,6 +136,75 @@ export default function JournalEntries() {
                     </button>
                     <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
                         + New Entry
+                    </button>
+                </div>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 mb-6">
+                <div className="flex items-center gap-2 mb-3 text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-100 dark:border-slate-700 pb-2">
+                    <Filter className="w-4 h-4" />
+                    <span className="text-sm">Filter Entries</span>
+                </div>
+                <div className="flex flex-wrap gap-4 items-end">
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                            className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <option value="">All Statuses</option>
+                            <option value="DRAFT">Draft</option>
+                            <option value="POSTED">Posted</option>
+                            <option value="VOIDED">Voided</option>
+                        </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Date Range</label>
+                        <select
+                            value={dateRangeType}
+                            onChange={(e) => { setDateRangeType(e.target.value); setPage(1); }}
+                            className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <option value="this-month">This Month</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                    </div>
+
+                    {dateRangeType === "custom" && (
+                        <>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-slate-500 uppercase">Start Date</label>
+                                <input
+                                    type="date"
+                                    value={customStartDate}
+                                    onChange={(e) => { setCustomStartDate(e.target.value); setPage(1); }}
+                                    className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-slate-500 uppercase">End Date</label>
+                                <input
+                                    type="date"
+                                    value={customEndDate}
+                                    onChange={(e) => { setCustomEndDate(e.target.value); setPage(1); }}
+                                    className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    <button
+                        onClick={() => {
+                            setStatusFilter("");
+                            setDateRangeType("this-month");
+                            setPage(1);
+                        }}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 font-medium pb-2 hover:underline"
+                    >
+                        Clear Filters
                     </button>
                 </div>
             </div>

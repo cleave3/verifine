@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import Sequence, Optional
 from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -18,18 +18,36 @@ class JournalEntryService:
         self.session = session
 
     async def get_journal_entries(
-        self, page: int = 1, page_size: int = 10
+        self, 
+        page: int = 1, 
+        page_size: int = 10,
+        status: Optional[JournalEntryStatus] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None
     ):
         statement = (
             select(JournalEntry)
             .options(selectinload(JournalEntry.lines))
             .order_by(JournalEntry.id.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
         )
-        results = await self.session.exec(statement)
         
         total_statement = select(func.count(JournalEntry.id))
+        
+        if status:
+            statement = statement.where(JournalEntry.status == status)
+            total_statement = total_statement.where(JournalEntry.status == status)
+            
+        if start_date:
+            statement = statement.where(JournalEntry.entry_date >= start_date)
+            total_statement = total_statement.where(JournalEntry.entry_date >= start_date)
+            
+        if end_date:
+            statement = statement.where(JournalEntry.entry_date <= end_date)
+            total_statement = total_statement.where(JournalEntry.entry_date <= end_date)
+            
+        statement = statement.offset((page - 1) * page_size).limit(page_size)
+        
+        results = await self.session.exec(statement)
         total_result = await self.session.exec(total_statement)
         total_records = total_result.first()
         

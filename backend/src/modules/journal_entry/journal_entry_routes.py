@@ -26,13 +26,26 @@ async def get_current_user_id(request: Request) -> int:
         raise BadRequest("Invalid authentication token")
 
 
+from datetime import date
+from typing import Optional
+from src.models.journal_entry import JournalEntryStatus
+
 @router.get("/")
 async def list_journal_entries(
     page: int = 1,
     page_size: int = 10,
+    status: Optional[JournalEntryStatus] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     je_service: JournalEntryService = Depends(get_journal_entry_service),
 ):
-    entries = await je_service.get_journal_entries(page, page_size)
+    entries = await je_service.get_journal_entries(
+        page=page, 
+        page_size=page_size, 
+        status=status, 
+        start_date=start_date, 
+        end_date=end_date
+    )
 
     data = []
     for entry in entries["results"]:
