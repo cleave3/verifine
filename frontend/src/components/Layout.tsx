@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun } from "lucide-react";
+import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
 
@@ -37,8 +37,8 @@ export default function Layout() {
     const isActive = (path: string) => path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
 
     const linkClass = (path: string) => `flex items-center px-3 py-2 text-sm font-medium rounded-md transition group ${isActive(path)
-            ? "bg-indigo-600/10 text-indigo-400 border border-indigo-500/20"
-            : "text-slate-300 hover:bg-slate-800 hover:text-white border border-transparent"
+        ? "bg-indigo-600/10 text-indigo-400 border border-indigo-500/20"
+        : "text-slate-300 hover:bg-slate-800 hover:text-white border border-transparent"
         }`;
 
     const iconClass = (path: string) => `mr-3 h-5 w-5 ${isActive(path) ? "text-indigo-400" : "text-slate-400 group-hover:text-white"
@@ -95,6 +95,14 @@ export default function Layout() {
                             <Link to="/ar/invoices" className={linkClass("/ar/invoices")}>
                                 <BookOpen className={iconClass("/ar/invoices")} />
                                 Invoices
+                            </Link>
+                        </div>
+
+                        <div className="pt-4 mt-2 border-t border-slate-700/50">
+                            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">System</p>
+                            <Link to="/settings" className={linkClass("/settings")}>
+                                <SettingsIcon className={iconClass("/settings")} />
+                                Settings
                             </Link>
                         </div>
                     </nav>

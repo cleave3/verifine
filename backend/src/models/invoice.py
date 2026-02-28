@@ -19,7 +19,11 @@ class Invoice(SQLModel, table=True):
     invoice_date: date
     due_date: date
     status: InvoiceStatus = Field(default=InvoiceStatus.DRAFT)
+    
+    currency_code: str = Field(default="NGN")
+    exchange_rate: float = Field(default=1.0)
     total_amount: float = Field(default=0.0)
+    base_total_amount: float = Field(default=0.0)
     notes: Optional[str] = None
 
     # Link to the generated Journal Entry once posted
@@ -35,5 +39,6 @@ class InvoiceLineItem(SQLModel, table=True):
     account_id: int = Field(foreign_key="account.id")  # Revenue account
     description: str
     amount: float
+    base_amount: float = Field(default=0.0)
 
     invoice: Invoice = Relationship(back_populates="lines")

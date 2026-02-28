@@ -5,6 +5,7 @@ import {
 import { DollarSign, TrendingUp, TrendingDown, CreditCard, Activity, ArrowUpRight, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '../lib/axios';
+import { useCurrencyStore } from '../store/currencyStore';
 
 interface ChartDataPoint {
     name: string;
@@ -35,11 +36,13 @@ interface DashboardData {
     recent_transactions: RecentTransaction[];
 }
 
-const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-};
-
 export default function Dashboard() {
+    const { baseCurrency } = useCurrencyStore();
+
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(value);
+    };
+
     const { data: dashboard, isLoading } = useQuery<DashboardData>({
         queryKey: ['dashboard-summary'],
         queryFn: async () => {
@@ -69,7 +72,7 @@ export default function Dashboard() {
     const isProfitable = (stats?.current_period_net_income || 0) >= 0;
 
     return (
-        <div className="mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
+        <div className="mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {/* Header */}
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Financial Overview</h1>
@@ -163,7 +166,7 @@ export default function Dashboard() {
                                     tick={{ fill: '#64748b' }}
                                     axisLine={false}
                                     tickLine={false}
-                                    tickFormatter={(val) => `$${val / 1000}k`}
+                                    tickFormatter={(val) => `₦${val / 1000}k`}
                                 />
                                 <RechartsTooltip
                                     cursor={{ fill: 'rgba(226, 232, 240, 0.5)' }}

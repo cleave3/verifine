@@ -37,6 +37,7 @@ class BillLineItemBase(BaseModel):
     account_id: int
     description: str
     amount: float
+    base_amount: Optional[float] = None
 
 
 class BillLineItemCreate(BillLineItemBase):
@@ -54,6 +55,8 @@ class BillBase(BaseModel):
     bill_date: date
     due_date: date
     notes: Optional[str] = None
+    currency_code: str = "NGN"
+    exchange_rate: float = 1.0
 
 
 class BillCreate(BillBase):
@@ -71,5 +74,6 @@ class BillRead(BillBase):
     id: int
     status: BillStatus
     total_amount: float
+    base_total_amount: float
     journal_entry_id: Optional[int] = None
     lines: List[BillLineItemRead]

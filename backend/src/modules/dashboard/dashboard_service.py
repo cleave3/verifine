@@ -47,8 +47,8 @@ class DashboardService:
             # Revenue (CREDITS - DEBITS)
             rev_stmt = (
                 select(
-                    func.sum(LedgerLine.credit).label("total_credit"),
-                    func.sum(LedgerLine.debit).label("total_debit"),
+                    func.sum(LedgerLine.base_credit).label("total_credit"),
+                    func.sum(LedgerLine.base_debit).label("total_debit"),
                 )
                 .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
                 .join(Account, Account.id == LedgerLine.account_id)
@@ -62,8 +62,8 @@ class DashboardService:
             # Expenses (DEBITS - CREDITS)
             exp_stmt = (
                 select(
-                    func.sum(LedgerLine.debit).label("total_debit"),
-                    func.sum(LedgerLine.credit).label("total_credit"),
+                    func.sum(LedgerLine.base_debit).label("total_debit"),
+                    func.sum(LedgerLine.base_credit).label("total_credit"),
                 )
                 .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
                 .join(Account, Account.id == LedgerLine.account_id)
@@ -85,7 +85,7 @@ class DashboardService:
         recent_txs = []
 
         for je in recent_jes:
-            line_stmt = select(func.sum(LedgerLine.debit)).where(
+            line_stmt = select(func.sum(LedgerLine.base_debit)).where(
                 LedgerLine.journal_entry_id == je.id
             )
             amount = (await self.session.exec(line_stmt)).first() or 0.0
@@ -111,8 +111,8 @@ class DashboardService:
         for period in last_6_periods:
             rev_stmt = (
                 select(
-                    func.sum(LedgerLine.credit).label("total_credit"),
-                    func.sum(LedgerLine.debit).label("total_debit"),
+                    func.sum(LedgerLine.base_credit).label("total_credit"),
+                    func.sum(LedgerLine.base_debit).label("total_debit"),
                 )
                 .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
                 .join(Account, Account.id == LedgerLine.account_id)
@@ -125,8 +125,8 @@ class DashboardService:
 
             exp_stmt = (
                 select(
-                    func.sum(LedgerLine.debit).label("total_debit"),
-                    func.sum(LedgerLine.credit).label("total_credit"),
+                    func.sum(LedgerLine.base_debit).label("total_debit"),
+                    func.sum(LedgerLine.base_credit).label("total_credit"),
                 )
                 .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
                 .join(Account, Account.id == LedgerLine.account_id)

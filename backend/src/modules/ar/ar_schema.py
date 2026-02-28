@@ -37,6 +37,7 @@ class InvoiceLineItemBase(BaseModel):
     account_id: int
     description: str
     amount: float
+    base_amount: Optional[float] = None
 
 
 class InvoiceLineItemCreate(InvoiceLineItemBase):
@@ -54,6 +55,8 @@ class InvoiceBase(BaseModel):
     invoice_date: date
     due_date: date
     notes: Optional[str] = None
+    currency_code: str = "NGN"
+    exchange_rate: float = 1.0
 
 
 class InvoiceCreate(InvoiceBase):
@@ -64,5 +67,6 @@ class InvoiceRead(InvoiceBase):
     id: int
     status: InvoiceStatus
     total_amount: float
+    base_total_amount: float
     journal_entry_id: Optional[int] = None
     lines: List[InvoiceLineItemRead]

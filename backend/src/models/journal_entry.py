@@ -28,8 +28,14 @@ class LedgerLine(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     journal_entry_id: int = Field(foreign_key="journalentry.id")
     account_id: int = Field(foreign_key="account.id")
-    debit: float = Field(default=0.0)
-    credit: float = Field(default=0.0)
+    
+    currency_code: str = Field(default="NGN")
+    exchange_rate: float = Field(default=1.0)
+    
+    transaction_debit: float = Field(default=0.0)
+    transaction_credit: float = Field(default=0.0)
+    base_debit: float = Field(default=0.0)
+    base_credit: float = Field(default=0.0)
     description: Optional[str] = None
 
     journal_entry: JournalEntry = Relationship(back_populates="lines")

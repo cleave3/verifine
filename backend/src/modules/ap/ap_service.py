@@ -82,6 +82,7 @@ class BillService:
 
         # Sum total
         total_amount = sum(line.amount for line in bill_in.lines)
+        base_total_amount = round(total_amount * bill_in.exchange_rate, 4)
 
         db_bill = Bill(
             vendor_id=bill_in.vendor_id,
@@ -90,17 +91,22 @@ class BillService:
             due_date=bill_in.due_date,
             notes=bill_in.notes,
             status=BillStatus.DRAFT,
+            currency_code=bill_in.currency_code,
+            exchange_rate=bill_in.exchange_rate,
             total_amount=total_amount,
+            base_total_amount=base_total_amount,
         )
         self.session.add(db_bill)
         await self.session.flush()
 
         for line_in in bill_in.lines:
+            base_amount = line_in.base_amount if line_in.base_amount is not None else round(line_in.amount * bill_in.exchange_rate, 4)
             db_line = BillLineItem(
                 bill_id=db_bill.id,
                 account_id=line_in.account_id,
                 description=line_in.description,
                 amount=line_in.amount,
+                base_amount=base_amount,
             )
             self.session.add(db_line)
 
@@ -146,8 +152,12 @@ class BillService:
             ledger_lines.append(
                 LedgerLineCreate(
                     account_id=line.account_id,
-                    debit=line.amount,
-                    credit=0.0,
+                    currency_code=db_bill.currency_code,
+                    exchange_rate=db_bill.exchange_rate,
+                    transaction_debit=line.amount,
+                    transaction_credit=0.0,
+                    base_debit=line.base_amount,
+                    base_credit=0.0,
                     description=line.description,
                 )
             )
@@ -155,8 +165,12 @@ class BillService:
         ledger_lines.append(
             LedgerLineCreate(
                 account_id=ap_act.id,
-                debit=0.0,
-                credit=db_bill.total_amount,
+                currency_code=db_bill.currency_code,
+                exchange_rate=db_bill.exchange_rate,
+                transaction_debit=0.0,
+                transaction_credit=db_bill.total_amount,
+                base_debit=0.0,
+                base_credit=db_bill.base_total_amount,
                 description=f"Bill Output - {db_bill.bill_number}",
             )
         )

@@ -33,8 +33,8 @@ async def get_trial_balance(
     stmt = (
         select(
             Account,
-            func.sum(LedgerLine.debit).label("total_debit"),
-            func.sum(LedgerLine.credit).label("total_credit"),
+            func.sum(LedgerLine.base_debit).label("total_debit"),
+            func.sum(LedgerLine.base_credit).label("total_credit"),
         )
         .join(LedgerLine, LedgerLine.account_id == Account.id)
         .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
@@ -108,8 +108,8 @@ async def get_profit_and_loss(
     stmt_revenue = (
         select(
             Account,
-            func.sum(LedgerLine.credit).label("total_credit"),
-            func.sum(LedgerLine.debit).label("total_debit"),
+            func.sum(LedgerLine.base_credit).label("total_credit"),
+            func.sum(LedgerLine.base_debit).label("total_debit"),
         )
         .join(LedgerLine, LedgerLine.account_id == Account.id)
         .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
@@ -123,8 +123,8 @@ async def get_profit_and_loss(
     stmt_expense = (
         select(
             Account,
-            func.sum(LedgerLine.debit).label("total_debit"),
-            func.sum(LedgerLine.credit).label("total_credit"),
+            func.sum(LedgerLine.base_debit).label("total_debit"),
+            func.sum(LedgerLine.base_credit).label("total_credit"),
         )
         .join(LedgerLine, LedgerLine.account_id == Account.id)
         .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
@@ -193,8 +193,8 @@ async def get_balance_sheet(
             Account.code,
             Account.name,
             Account.type,
-            func.sum(LedgerLine.debit).label("total_debit"),
-            func.sum(LedgerLine.credit).label("total_credit"),
+            func.sum(LedgerLine.base_debit).label("total_debit"),
+            func.sum(LedgerLine.base_credit).label("total_credit"),
         )
         .join(LedgerLine, LedgerLine.account_id == Account.id)
         .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)

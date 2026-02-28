@@ -83,6 +83,7 @@ class InvoiceService:
             raise BadRequest("Invalid customer ID")
 
         total_amount = sum(line.amount for line in invoice_in.lines)
+        base_total_amount = round(total_amount * invoice_in.exchange_rate, 4)
 
         db_invoice = Invoice(
             customer_id=invoice_in.customer_id,
@@ -91,17 +92,22 @@ class InvoiceService:
             due_date=invoice_in.due_date,
             notes=invoice_in.notes,
             status=InvoiceStatus.DRAFT,
+            currency_code=invoice_in.currency_code,
+            exchange_rate=invoice_in.exchange_rate,
             total_amount=total_amount,
+            base_total_amount=base_total_amount,
         )
         self.session.add(db_invoice)
         await self.session.flush()
 
         for line_in in invoice_in.lines:
+            base_amount = line_in.base_amount if line_in.base_amount is not None else round(line_in.amount * invoice_in.exchange_rate, 4)
             db_line = InvoiceLineItem(
                 invoice_id=db_invoice.id,
                 account_id=line_in.account_id,
                 description=line_in.description,
                 amount=line_in.amount,
+                base_amount=base_amount,
             )
             self.session.add(db_line)
 
@@ -152,8 +158,12 @@ class InvoiceService:
         ledger_lines.append(
             LedgerLineCreate(
                 account_id=ar_act.id,
-                debit=db_invoice.total_amount,
-                credit=0.0,
+                currency_code=db_invoice.currency_code,
+                exchange_rate=db_invoice.exchange_rate,
+                transaction_debit=db_invoice.total_amount,
+                transaction_credit=0.0,
+                base_debit=db_invoice.base_total_amount,
+                base_credit=0.0,
                 description=f"Invoice Output - {db_invoice.invoice_number}",
             )
         )
@@ -163,8 +173,12 @@ class InvoiceService:
             ledger_lines.append(
                 LedgerLineCreate(
                     account_id=line.account_id,
-                    debit=0.0,
-                    credit=line.amount,
+                    currency_code=db_invoice.currency_code,
+                    exchange_rate=db_invoice.exchange_rate,
+                    transaction_debit=0.0,
+                    transaction_credit=line.amount,
+                    base_debit=0.0,
+                    base_credit=line.base_amount,
                     description=line.description,
                 )
             )

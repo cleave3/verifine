@@ -6,6 +6,7 @@ import * as z from "zod";
 import { format } from "date-fns";
 import api from "../lib/axios";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { useCurrencyStore } from "../store/currencyStore";
 
 const billSchema = z.object({
     vendor_id: z.coerce.number().min(1),
@@ -14,15 +15,18 @@ const billSchema = z.object({
     due_date: z.string(),
     bill_number: z.string().min(1),
     description: z.string().optional(),
+    currency_code: z.string().default("NGN"),
+    exchange_rate: z.number().default(1.0),
     lines: z.array(z.object({
         account_id: z.coerce.number().min(1),
         amount: z.coerce.number().min(0.01),
         description: z.string().optional()
     })).min(1),
 });
-type BillFormValues = z.infer<typeof billSchema>;
+// type BillFormValues = z.infer<typeof billSchema>;
 
 export default function Bills() {
+    const { baseCurrency, activeRates } = useCurrencyStore();
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [confirmAction, setConfirmAction] = useState<{ type: 'APPROVE' | 'POST' | 'PAY', id: number } | null>(null);
@@ -42,6 +46,7 @@ export default function Bills() {
     const createMutation = useMutation({
         mutationFn: async (payload: any) => {
             const total = payload.lines.reduce((sum: number, line: any) => sum + Number(line.amount), 0);
+            payload.exchange_rate = activeRates[payload.currency_code] || 1.0;
             return await api.post("/ap/bills/", { ...payload, total_amount: total });
         },
         onSuccess: () => {
@@ -74,11 +79,19 @@ export default function Bills() {
             bill_date: new Date().toISOString().split('T')[0],
             due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             bill_number: "", description: "",
+            currency_code: baseCurrency || "NGN",
+            exchange_rate: 1.0,
             lines: [{ account_id: 0, amount: 0, description: "" }]
         }
     });
 
     const { fields, append, remove } = useFieldArray({ control: form.control, name: "lines" });
+
+    const watchedCurrency = form.watch("currency_code");
+    const watchedLines = form.watch("lines");
+    const totalInputAmount = watchedLines?.reduce((sum: number, line: any) => sum + (Number(line.amount) || 0), 0) || 0;
+    const activeRate = activeRates[watchedCurrency] || 1.0;
+    const baseTotal = totalInputAmount * activeRate;
 
     return (
         <div className="p-6">
@@ -110,7 +123,9 @@ export default function Bills() {
                                     <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">{b.bill_number}</td>
                                     <td className="px-6 py-4 text-sm font-medium text-indigo-600 dark:text-indigo-400">{getVendorName(b.vendor_id)}</td>
                                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{format(new Date(b.bill_date), 'MMM d, yyyy')}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">${b.total_amount.toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                                        {new Intl.NumberFormat('en-NG', { style: 'currency', currency: b.currency_code || baseCurrency }).format(b.total_amount)}
+                                    </td>
                                     <td className="px-6 py-4 text-sm">
                                         <span className={`px-2 py-1 text-xs font-semibold rounded-full uppercase ${b.status === 'APPROVED' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-800'}`}>
                                             {b.status}
@@ -136,7 +151,7 @@ export default function Bills() {
             )}
 
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Enter Bill</h2>
                         <form onSubmit={form.handleSubmit((d: any) => createMutation.mutate(d))} className="space-y-4">
@@ -174,6 +189,22 @@ export default function Bills() {
                                     <input {...form.register("description")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
                                 </div>
                             </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Currency</label>
+                                    <select {...form.register("currency_code")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
+                                        {Object.keys(activeRates).map(code => (
+                                            <option key={code} value={code}>{code}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Base Equivalent ({baseCurrency})</label>
+                                    <div className="mt-1 p-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-md border border-slate-200 dark:border-slate-700 font-semibold opacity-80">
+                                        {new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(baseTotal)}
+                                    </div>
+                                </div>
+                            </div>
 
                             <div className="pt-4 border-t border-slate-200 dark:border-slate-700 mt-4">
                                 <div className="flex justify-between items-center mb-2">
@@ -190,7 +221,7 @@ export default function Bills() {
                                         <button type="button" onClick={() => remove(index)} className="text-rose-500 px-2 font-bold">✕</button>
                                     </div>
                                 ))}
-                                {form.formState.errors.lines?.root && <p className="text-rose-500 text-sm mt-2">{form.formState.errors.lines.root.message}</p>}
+                                {form.formState.errors.lines?.root && <p className="text-rose-500 text-sm mt-2">{form.formState.errors.lines.root.message as string}</p>}
                             </div>
 
                             <div className="flex justify-end gap-3 mt-6">

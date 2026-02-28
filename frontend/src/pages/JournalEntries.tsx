@@ -29,6 +29,7 @@ type JEFormValues = z.infer<typeof jeSchema>;
 export default function JournalEntries() {
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedEntry, setSelectedEntry] = useState<any>(null);
 
     const { data: jeRes, isLoading } = useQuery({
         queryKey: ["journal-entries"],
@@ -146,7 +147,10 @@ export default function JournalEntries() {
                                             {je.status}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-sm">
+                                    <td className="px-6 py-4 text-sm flex items-center gap-3">
+                                        <button onClick={() => setSelectedEntry(je)} className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium">
+                                            View
+                                        </button>
                                         {je.status === 'DRAFT' && (
                                             <button onClick={() => postMutation.mutate(je.id)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-medium">
                                                 Post
@@ -168,7 +172,7 @@ export default function JournalEntries() {
             )}
 
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black/50 z-100 flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">New Journal Entry</h2>
                         <form onSubmit={form.handleSubmit((d: any) => createMutation.mutate(d))} className="space-y-4">
@@ -207,7 +211,7 @@ export default function JournalEntries() {
                                     </div>
                                 ))}
                                 {form.formState.errors.lines?.root && (
-                                    <p className="text-rose-500 text-sm mt-2">{form.formState.errors.lines.root.message}</p>
+                                    <p className="text-rose-500 text-sm mt-2">{form.formState.errors.lines.root.message as string}</p>
                                 )}
                             </div>
 
@@ -218,6 +222,81 @@ export default function JournalEntries() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {selectedEntry && (
+                <div className="fixed inset-0 bg-black/50 z-100 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-4 mb-4">
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white pb-1">Journal Entry Details</h2>
+                                <p className="text-sm font-mono text-slate-500">ID: {selectedEntry.transaction_id} | Date: {format(new Date(selectedEntry.entry_date), 'MMM d, yyyy')}</p>
+                            </div>
+                            <span className={`px-3 py-1 text-xs font-semibold rounded-full uppercase
+                                ${selectedEntry.status === 'POSTED' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'}`}>
+                                {selectedEntry.status}
+                            </span>
+                        </div>
+
+                        <div className="mb-6">
+                            <h3 className="text-sm font-semibold text-slate-800 dark:text-gray-200 mb-1">Memo / Description</h3>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-3 rounded border border-slate-200 dark:border-slate-700">
+                                {selectedEntry.description || "N/A"}
+                            </p>
+                        </div>
+
+                        <h3 className="text-sm font-semibold text-slate-800 dark:text-gray-200 mb-2">Ledger Lines</h3>
+                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto">
+                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                                <thead className="bg-slate-50 dark:bg-slate-900">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Account</th>
+                                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Description</th>
+                                        <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase">Currency</th>
+                                        <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase">Exchange Rate</th>
+                                        <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase">Txn Debit</th>
+                                        <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase">Txn Credit</th>
+                                        <th className="px-4 py-2 text-right text-xs font-medium text-indigo-500 dark:text-indigo-400 uppercase">Base Debit</th>
+                                        <th className="px-4 py-2 text-right text-xs font-medium text-indigo-500 dark:text-indigo-400 uppercase">Base Credit</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
+                                    {selectedEntry.lines?.map((line: any, idx: number) => {
+                                        const account = accounts.find((a: any) => a.id === line.account_id);
+                                        return (
+                                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 text-sm">
+                                                <td className="px-4 py-2 font-medium text-slate-900 dark:text-white">{account?.code} - {account?.name}</td>
+                                                <td className="px-4 py-2 text-slate-600 dark:text-slate-300 text-xs">{line.description || "-"}</td>
+                                                <td className="px-4 py-2 font-mono text-slate-600 dark:text-slate-300 text-right">{line.currency_code}</td>
+                                                <td className="px-4 py-2 font-mono text-slate-600 dark:text-slate-300 text-right">{line.exchange_rate}</td>
+                                                <td className="px-4 py-2 font-mono text-slate-600 dark:text-slate-300 text-right">{line.transaction_debit > 0 ? (line.transaction_debit).toFixed(2) : "-"}</td>
+                                                <td className="px-4 py-2 font-mono text-slate-600 dark:text-slate-300 text-right">{line.transaction_credit > 0 ? (line.transaction_credit).toFixed(2) : "-"}</td>
+                                                <td className="px-4 py-2 font-mono text-slate-900 dark:text-white text-right">{line.base_debit > 0 ? (line.base_debit).toFixed(2) : "-"}</td>
+                                                <td className="px-4 py-2 font-mono text-slate-900 dark:text-white text-right">{line.base_credit > 0 ? (line.base_credit).toFixed(2) : "-"}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {/* Subtotal Row */}
+                                    <tr className="bg-slate-50 dark:bg-slate-900 font-medium">
+                                        <td colSpan={6} className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 text-xs uppercase cursor-default">Totals:</td>
+                                        <td className="px-4 py-3 text-right font-mono text-indigo-600 dark:text-indigo-400 cursor-default">
+                                            {selectedEntry.lines?.reduce((acc: number, l: any) => acc + (l.base_debit || 0), 0).toFixed(2)}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-mono text-indigo-600 dark:text-indigo-400 cursor-default">
+                                            {selectedEntry.lines?.reduce((acc: number, l: any) => acc + (l.base_credit || 0), 0).toFixed(2)}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="flex justify-end mt-6">
+                            <button onClick={() => setSelectedEntry(null)} className="px-6 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition">
+                                Close
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

@@ -3,8 +3,14 @@ import { useState } from "react";
 import api from "../lib/axios";
 import { exportToCsv } from "../lib/export";
 import { Download } from "lucide-react";
+import { useCurrencyStore } from "../store/currencyStore";
 
 export default function Reports() {
+    const { baseCurrency } = useCurrencyStore();
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(value);
+    };
+
     const [selectedPeriod, setSelectedPeriod] = useState<number>(0);
     const [reportType, setReportType] = useState<"TB" | "PNL" | "BS">("TB");
 
@@ -164,7 +170,7 @@ export default function Reports() {
 
                             <div className={`flex justify-between font-bold text-xl py-6 px-4 mt-6 rounded-lg ${reportData.net_income >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400'}`}>
                                 <span>Net Income</span>
-                                <span className="font-mono">${reportData.net_income?.toFixed(2)}</span>
+                                <span className="font-mono">{formatCurrency(reportData.net_income || 0)}</span>
                             </div>
                         </div>
                     )}
@@ -216,7 +222,7 @@ export default function Reports() {
 
                             <div className={`flex justify-between font-bold text-xl py-6 px-4 mt-6 rounded-lg ${reportData.is_balanced ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400'}`}>
                                 <span>Total Liabilities & Equity</span>
-                                <span className="font-mono">${reportData.total_liabilities_and_equity?.toFixed(2)}</span>
+                                <span className="font-mono">{formatCurrency(reportData.total_liabilities_and_equity || 0)}</span>
                             </div>
                         </div>
                     )}

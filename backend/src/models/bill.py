@@ -19,7 +19,11 @@ class Bill(SQLModel, table=True):
     bill_date: date
     due_date: date
     status: BillStatus = Field(default=BillStatus.DRAFT)
+    
+    currency_code: str = Field(default="NGN")
+    exchange_rate: float = Field(default=1.0)
     total_amount: float = Field(default=0.0)
+    base_total_amount: float = Field(default=0.0)
     notes: Optional[str] = None
 
     # Optional link to the generated Journal Entry once posted
@@ -35,5 +39,6 @@ class BillLineItem(SQLModel, table=True):
     account_id: int = Field(foreign_key="account.id")  # Expense account
     description: str
     amount: float
+    base_amount: float = Field(default=0.0)
 
     bill: Bill = Relationship(back_populates="lines")

@@ -86,8 +86,12 @@ class JournalEntryService:
             db_line = LedgerLine(
                 journal_entry_id=db_je.id,
                 account_id=line_in.account_id,
-                debit=line_in.debit,
-                credit=line_in.credit,
+                currency_code=line_in.currency_code,
+                exchange_rate=line_in.exchange_rate,
+                transaction_debit=line_in.transaction_debit,
+                transaction_credit=line_in.transaction_credit,
+                base_debit=line_in.base_debit,
+                base_credit=line_in.base_credit,
                 description=line_in.description,
             )
             self.session.add(db_line)
