@@ -1,5 +1,6 @@
+import uuid
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select, func, desc
+from sqlmodel import select, func, desc, and_
 from datetime import datetime, timezone
 
 from src.models.fiscal_period import FiscalPeriod, PeriodStatus
@@ -19,13 +20,13 @@ class DashboardService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_dashboard_summary(self) -> dict:
+    async def get_dashboard_summary(self, org_id: uuid.UUID) -> dict:
         # --- 1. Top Level Stats ---
         ar_stmt = select(func.sum(Invoice.total_amount)).where(
-            Invoice.status.in_(["SENT", "POSTED"])
+            and_(Invoice.status.in_(["SENT", "POSTED"]), Invoice.org_id == org_id)
         )
         ap_stmt = select(func.sum(Bill.total_amount)).where(
-            Bill.status.in_(["APPROVED", "POSTED"])
+            and_(Bill.status.in_(["APPROVED", "POSTED"]), Bill.org_id == org_id)
         )
 
         total_open_ar = (await self.session.exec(ar_stmt)).first() or 0.0
@@ -34,7 +35,12 @@ class DashboardService:
         # Current Period Stats
         current_period_stmt = (
             select(FiscalPeriod)
-            .where(FiscalPeriod.status == PeriodStatus.OPEN)
+            .where(
+                and_(
+                    FiscalPeriod.status == PeriodStatus.OPEN,
+                    FiscalPeriod.org_id == org_id,
+                )
+            )
             .order_by(FiscalPeriod.start_date.desc())
             .limit(1)
         )
@@ -75,9 +81,9 @@ class DashboardService:
             curr_exp = float(d or 0) - float(c or 0)
 
         # --- 2. Recent Transactions ---
-        # Fixed journal_date to entry_date, created_at is not on JournalEntry either. Wait, looking at JournalEntry model, it only has id, transaction_id, description, entry_date, status, period_id, created_by_id. Let's order by entry_date and id instead.
         recent_stmt = (
             select(JournalEntry)
+            .where(JournalEntry.org_id == org_id)
             .order_by(desc(JournalEntry.entry_date), desc(JournalEntry.id))
             .limit(8)
         )
@@ -101,7 +107,10 @@ class DashboardService:
 
         # --- 3. Chart Data (Last 6 Periods) ---
         periods_stmt = (
-            select(FiscalPeriod).order_by(desc(FiscalPeriod.start_date)).limit(6)
+            select(FiscalPeriod)
+            .where(FiscalPeriod.org_id == org_id)
+            .order_by(desc(FiscalPeriod.start_date))
+            .limit(6)
         )
         last_6_periods = (await self.session.exec(periods_stmt)).all()
         last_6_periods.reverse()

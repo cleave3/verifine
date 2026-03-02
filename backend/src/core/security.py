@@ -8,7 +8,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def create_access_token(
-    subject: Union[str, Any], expires_delta: timedelta | None = None
+    subject: Union[str, Any], org_id: str = "", expires_delta: timedelta | None = None
 ) -> str:
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -16,16 +16,26 @@ def create_access_token(
         expire = datetime.now(timezone.utc) + timedelta(
             minutes=Config.ACCESS_TOKEN_EXPIRE_MINUTES
         )
-    to_encode = {"exp": expire, "sub": str(subject), "type": "access"}
+    to_encode = {
+        "exp": expire,
+        "sub": str(subject),
+        "org": str(org_id),
+        "type": "access",
+    }
     encoded_jwt = jwt.encode(to_encode, Config.SECRET_KEY, algorithm=Config.ALGORITHM)
     return encoded_jwt
 
 
-def create_refresh_token(subject: Union[str, Any]) -> str:
+def create_refresh_token(subject: Union[str, Any], org_id: str = "") -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         days=Config.REFRESH_TOKEN_EXPIRE_DAYS
     )
-    to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
+    to_encode = {
+        "exp": expire,
+        "sub": str(subject),
+        "org": str(org_id),
+        "type": "refresh",
+    }
     return jwt.encode(to_encode, Config.SECRET_KEY, algorithm=Config.ALGORITHM)
 
 

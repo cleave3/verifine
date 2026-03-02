@@ -1,8 +1,9 @@
+import uuid
 from datetime import datetime, date
 from typing import Sequence, Optional
 from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select
+from sqlmodel import select, and_
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 from src.core.database import get_session
@@ -18,56 +19,72 @@ class JournalEntryService:
         self.session = session
 
     async def get_journal_entries(
-        self, 
-        page: int = 1, 
+        self,
+        org_id: uuid.UUID,
+        page: int = 1,
         page_size: int = 10,
         status: Optional[JournalEntryStatus] = None,
         start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        end_date: Optional[date] = None,
     ):
         statement = (
             select(JournalEntry)
+            .where(JournalEntry.org_id == org_id)
             .options(selectinload(JournalEntry.lines))
             .order_by(JournalEntry.id.desc())
         )
-        
-        total_statement = select(func.count(JournalEntry.id))
-        
+
+        total_statement = select(func.count(JournalEntry.id)).where(
+            JournalEntry.org_id == org_id
+        )
+
         if status:
             statement = statement.where(JournalEntry.status == status)
             total_statement = total_statement.where(JournalEntry.status == status)
-            
+
         if start_date:
             statement = statement.where(JournalEntry.entry_date >= start_date)
-            total_statement = total_statement.where(JournalEntry.entry_date >= start_date)
-            
+            total_statement = total_statement.where(
+                JournalEntry.entry_date >= start_date
+            )
+
         if end_date:
             statement = statement.where(JournalEntry.entry_date <= end_date)
             total_statement = total_statement.where(JournalEntry.entry_date <= end_date)
-            
+
         statement = statement.offset((page - 1) * page_size).limit(page_size)
-        
+
         results = await self.session.exec(statement)
         total_result = await self.session.exec(total_statement)
         total_records = total_result.first()
-        
-        return {"results": results.all(), "meta": get_pagination_meta(page, page_size, total_records)}
 
-    async def get_journal_entry_by_id(self, je_id: int) -> Optional[JournalEntry]:
+        return {
+            "results": results.all(),
+            "meta": get_pagination_meta(page, page_size, total_records),
+        }
+
+    async def get_journal_entry_by_id(
+        self, org_id: uuid.UUID, je_id: int
+    ) -> Optional[JournalEntry]:
         statement = (
             select(JournalEntry)
-            .where(JournalEntry.id == je_id)
+            .where(and_(JournalEntry.id == je_id, JournalEntry.org_id == org_id))
             .options(selectinload(JournalEntry.lines))
         )
         result = await self.session.exec(statement)
         return result.first()
 
-    async def generate_transaction_id(self, entry_date: datetime.date) -> str:
+    async def generate_transaction_id(
+        self, org_id: uuid.UUID, entry_date: datetime.date
+    ) -> str:
         year_month = entry_date.strftime("%Y-%m")
         prefix = f"JE-{year_month}-"
 
         statement = select(JournalEntry).where(
-            JournalEntry.transaction_id.startswith(prefix)
+            and_(
+                JournalEntry.transaction_id.startswith(prefix),
+                JournalEntry.org_id == org_id,
+            )
         )
         results = await self.session.exec(statement)
         existing_entries = results.all()
@@ -76,10 +93,13 @@ class JournalEntryService:
         return f"{prefix}{next_num:04d}"
 
     async def create_journal_entry(
-        self, je_in: JournalEntryCreate, user_id: int
+        self, org_id: uuid.UUID, je_in: JournalEntryCreate, user_id: int
     ) -> JournalEntry:
         # 1. Validate the fiscal period
-        period = await self.session.get(FiscalPeriod, je_in.period_id)
+        stmt = select(FiscalPeriod).where(
+            and_(FiscalPeriod.id == je_in.period_id, FiscalPeriod.org_id == org_id)
+        )
+        period = (await self.session.exec(stmt)).first()
         if not period:
             raise BadRequest("Invalid fiscal period specified.")
 
@@ -94,7 +114,7 @@ class JournalEntryService:
             )
 
         # 2. Generate Transaction ID
-        transaction_id = await self.generate_transaction_id(je_in.entry_date)
+        transaction_id = await self.generate_transaction_id(org_id, je_in.entry_date)
 
         # 3. Create the Journal Entry
         db_je = JournalEntry(
@@ -104,6 +124,7 @@ class JournalEntryService:
             period_id=je_in.period_id,
             created_by_id=user_id,
             status=JournalEntryStatus.POSTED,
+            org_id=org_id,
         )
 
         self.session.add(db_je)
@@ -121,13 +142,14 @@ class JournalEntryService:
                 base_debit=line_in.base_debit,
                 base_credit=line_in.base_credit,
                 description=line_in.description,
+                org_id=org_id,
             )
             self.session.add(db_line)
 
         # 5. Commit atomically
         await self.session.commit()
 
-        return await self.get_journal_entry_by_id(db_je.id)
+        return await self.get_journal_entry_by_id(org_id, db_je.id)
 
 
 def get_journal_entry_service(

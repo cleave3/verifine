@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,26 +8,30 @@ import { format, startOfMonth, endOfMonth } from "date-fns";
 import api from "../lib/axios";
 import { exportToCsv } from "../lib/export";
 import { Download, ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import { RoleGuard } from "../components/RoleGuard";
+import { useCurrencyStore } from "../store/currencyStore";
 
 const jeSchema = z.object({
     description: z.string().min(3),
     entry_date: z.string(),
     period_id: z.coerce.number().min(1),
+    currency_code: z.string().default("NGN"),
     lines: z.array(z.object({
         account_id: z.coerce.number().min(1),
-        debit: z.coerce.number().min(0).default(0),
-        credit: z.coerce.number().min(0).default(0),
+        transaction_debit: z.coerce.number().min(0).default(0),
+        transaction_credit: z.coerce.number().min(0).default(0),
         description: z.string().optional()
     })).min(2),
 }).refine(data => {
-    const totalD = data.lines.reduce((acc, curr) => acc + curr.debit, 0);
-    const totalC = data.lines.reduce((acc, curr) => acc + curr.credit, 0);
+    const totalD = data.lines.reduce((acc, curr) => acc + curr.transaction_debit, 0);
+    const totalC = data.lines.reduce((acc, curr) => acc + curr.transaction_credit, 0);
     return Math.abs(totalD - totalC) < 0.01 && totalD > 0;
 }, { message: "Debits must equal credits and be greater than 0", path: ["lines"] });
 
 type JEFormValues = z.infer<typeof jeSchema>;
 
 export default function JournalEntries() {
+    const { baseCurrency, activeRates } = useCurrencyStore();
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedEntry, setSelectedEntry] = useState<any>(null);
@@ -68,17 +73,40 @@ export default function JournalEntries() {
     const periods = perRes?.data?.filter((p: any) => p.status === "OPEN") || [];
 
     const createMutation = useMutation({
-        mutationFn: async (payload: JEFormValues) => await api.post("/journal-entries/", payload),
+        mutationFn: async (payload: JEFormValues) => {
+            const exchange_rate = activeRates[payload.currency_code] || 1.0;
+            const formattedPayload = {
+                description: payload.description,
+                entry_date: payload.entry_date,
+                period_id: payload.period_id,
+                lines: payload.lines.map(line => ({
+                    ...line,
+                    currency_code: payload.currency_code,
+                    exchange_rate
+                }))
+            };
+            return await api.post("/journal-entries/", formattedPayload);
+        },
         onSuccess: () => {
+            toast.success("Journal entry created successfully");
             queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
             setIsModalOpen(false);
             form.reset();
         },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to create journal entry");
+        }
     });
 
     const postMutation = useMutation({
         mutationFn: async (id: number) => await api.post(`/journal-entries/${id}/post`),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["journal-entries"] }),
+        onSuccess: () => {
+            toast.success("Journal entry posted successfully");
+            queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to post journal entry");
+        }
     });
 
     const form = useForm<any>({
@@ -88,14 +116,25 @@ export default function JournalEntries() {
             description: "",
             entry_date: new Date().toISOString().split('T')[0],
             period_id: 0,
+            currency_code: baseCurrency || "NGN",
             lines: [
-                { account_id: 0, debit: 0, credit: 0, description: "" },
-                { account_id: 0, debit: 0, credit: 0, description: "" }
+                { account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "" },
+                { account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "" }
             ]
         }
     });
 
     const { fields, append, remove } = useFieldArray({ control: form.control, name: "lines" });
+
+    const watchedCurrency = form.watch("currency_code");
+    const watchedLines = form.watch("lines");
+    const activeRate = activeRates[watchedCurrency] || 1.0;
+
+    const totalInputDebit = watchedLines?.reduce((sum: number, line: any) => sum + (Number(line.transaction_debit) || 0), 0) || 0;
+    const totalInputCredit = watchedLines?.reduce((sum: number, line: any) => sum + (Number(line.transaction_credit) || 0), 0) || 0;
+
+    const baseTotalDebit = totalInputDebit * activeRate;
+    const baseTotalCredit = totalInputCredit * activeRate;
 
     const handleExport = () => {
         if (!entries || entries.length === 0) return;
@@ -117,8 +156,8 @@ export default function JournalEntries() {
                     acct?.code || line.account_id,
                     acct?.name || "Unknown Account",
                     line.description || "",
-                    line.debit || 0,
-                    line.credit || 0
+                    line.transaction_debit || 0,
+                    line.transaction_credit || 0
                 ]);
             });
         });
@@ -134,9 +173,11 @@ export default function JournalEntries() {
                     <button onClick={handleExport} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 px-4 py-2 rounded shadow-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition">
                         <Download className="w-4 h-4" /> Export CSV
                     </button>
-                    <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
-                        + New Entry
-                    </button>
+                    <RoleGuard allowedRoles={['admin', 'controller', 'accountant']}>
+                        <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
+                            + New Entry
+                        </button>
+                    </RoleGuard>
                 </div>
             </div>
 
@@ -330,15 +371,33 @@ export default function JournalEntries() {
                                     <input type="date" {...form.register("entry_date")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Description / Memo</label>
-                                <input {...form.register("description")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Description / Memo</label>
+                                    <input {...form.register("description")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Currency</label>
+                                    <select {...form.register("currency_code")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
+                                        {Object.keys(activeRates).map(code => (
+                                            <option key={code} value={code}>{code}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
+
+                            {watchedCurrency !== baseCurrency && (
+                                <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-200 dark:border-slate-700 text-sm">
+                                    <span className="font-semibold text-slate-700 dark:text-slate-300">Base Currency Equivalents ({baseCurrency}): </span>
+                                    <span className="text-indigo-600 dark:text-indigo-400">Debit: {new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(baseTotalDebit)}</span> |
+                                    <span className="text-rose-600 dark:text-rose-400 ml-2">Credit: {new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(baseTotalCredit)}</span>
+                                </div>
+                            )}
 
                             <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
                                 <div className="flex justify-between items-center mb-2">
                                     <h3 className="text-sm font-bold text-slate-800 dark:text-white">Lines</h3>
-                                    <button type="button" onClick={() => append({ account_id: 0, debit: 0, credit: 0, description: "" })} className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">+ Add Line</button>
+                                    <button type="button" onClick={() => append({ account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "" })} className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">+ Add Line</button>
                                 </div>
                                 <div className="overflow-x-auto pb-4">
                                     <div className="min-w-[500px]">
@@ -348,8 +407,8 @@ export default function JournalEntries() {
                                                     <option value={0}>Account</option>
                                                     {accounts.map((a: any) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
                                                 </select>
-                                                <input type="number" step="0.01" placeholder="Debit" {...form.register(`lines.${index}.debit`)} className="w-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
-                                                <input type="number" step="0.01" placeholder="Credit" {...form.register(`lines.${index}.credit`)} className="w-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
+                                                <input type="number" step="0.01" placeholder="Debit" {...form.register(`lines.${index}.transaction_debit`)} className="w-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
+                                                <input type="number" step="0.01" placeholder="Credit" {...form.register(`lines.${index}.transaction_credit`)} className="w-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
                                                 <button type="button" onClick={() => remove(index)} className="text-rose-500 px-2 font-bold shrink-0">✕</button>
                                             </div>
                                         ))}

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,10 +34,14 @@ export default function Vendors() {
             return await api.post("/ap/vendors/", newVendor);
         },
         onSuccess: () => {
+            toast.success("Vendor added successfully");
             queryClient.invalidateQueries({ queryKey: ["vendors"] });
             setIsModalOpen(false);
             form.reset();
         },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to add vendor");
+        }
     });
 
     const form = useForm<any>({
@@ -94,7 +99,7 @@ export default function Vendors() {
             )}
 
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black/50 z-100 flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-md shadow-2xl">
                         <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Add Vendor</h2>
                         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

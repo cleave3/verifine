@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,7 +8,8 @@ import { format, startOfMonth, endOfMonth } from "date-fns";
 import api from "../lib/axios";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useCurrencyStore } from "../store/currencyStore";
-import { ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter, Download } from "lucide-react";
+import { RoleGuard } from "../components/RoleGuard";
 
 const invoiceSchema = z.object({
     customer_id: z.coerce.number().min(1),
@@ -75,25 +77,50 @@ export default function Invoices() {
             return await api.post("/ar/invoices/", { ...payload, total_amount: total });
         },
         onSuccess: () => {
+            toast.success("Invoice created successfully");
             queryClient.invalidateQueries({ queryKey: ["invoices"] });
             setIsModalOpen(false);
             form.reset();
         },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to create invoice");
+        }
     });
 
     const sendMutation = useMutation({
         mutationFn: async (id: number) => await api.patch(`/ar/invoices/${id}/sent`),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        onSuccess: () => {
+            toast.success("Invoice marked as sent");
+            queryClient.invalidateQueries({ queryKey: ["invoices"] });
+            setConfirmAction(null);
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || "Failed to send invoice");
+        }
     });
 
     const postMutation = useMutation({
         mutationFn: async (id: number) => await api.patch(`/ar/invoices/${id}/post`),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        onSuccess: () => {
+            toast.success("Invoice posted successfully");
+            queryClient.invalidateQueries({ queryKey: ["invoices"] });
+            setConfirmAction(null);
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || "Failed to post invoice");
+        }
     });
 
     const payMutation = useMutation({
         mutationFn: async (id: number) => await api.patch(`/ar/invoices/${id}/pay`),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        onSuccess: () => {
+            toast.success("Invoice marked as paid");
+            queryClient.invalidateQueries({ queryKey: ["invoices"] });
+            setConfirmAction(null);
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || "Failed to mark as paid");
+        }
     });
 
     const form = useForm<any>({
@@ -122,9 +149,11 @@ export default function Invoices() {
         <div className="p-6">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-gray-100">Accounts Receivable Invoices</h1>
-                <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
-                    + Create Invoice
-                </button>
+                <RoleGuard allowedRoles={['admin', 'controller', 'clerk']}>
+                    <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
+                        + Create Invoice
+                    </button>
+                </RoleGuard>
             </div>
 
             {/* Filters */}
@@ -242,16 +271,43 @@ export default function Invoices() {
                                             {inv.status}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-sm">
+                                    <td className="px-6 py-4 text-sm flex gap-2">
                                         {inv.status === 'DRAFT' && (
-                                            <button onClick={() => setConfirmAction({ type: 'SEND', id: inv.id })} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-medium whitespace-nowrap">Send</button>
+                                            <RoleGuard allowedRoles={['admin', 'controller', 'clerk']}>
+                                                <button onClick={() => setConfirmAction({ type: 'SEND', id: inv.id })} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-medium whitespace-nowrap">Send</button>
+                                            </RoleGuard>
                                         )}
                                         {inv.status === 'SENT' && (
-                                            <button onClick={() => setConfirmAction({ type: 'POST', id: inv.id })} className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300 font-medium whitespace-nowrap">Post to GL</button>
+                                            <RoleGuard allowedRoles={['admin', 'controller']}>
+                                                <button onClick={() => setConfirmAction({ type: 'POST', id: inv.id })} className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300 font-medium whitespace-nowrap">Post to GL</button>
+                                            </RoleGuard>
                                         )}
                                         {inv.status === 'POSTED' && (
-                                            <button onClick={() => setConfirmAction({ type: 'PAY', id: inv.id })} className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 font-medium whitespace-nowrap">Mark Paid</button>
+                                            <RoleGuard allowedRoles={['admin', 'controller', 'clerk']}>
+                                                <button onClick={() => setConfirmAction({ type: 'PAY', id: inv.id })} className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 font-medium whitespace-nowrap">Mark Paid</button>
+                                            </RoleGuard>
                                         )}
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    const response = await api.get(`/ar/invoices/${inv.id}/pdf`, { responseType: 'blob' });
+                                                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                                                    const link = document.createElement('a');
+                                                    link.href = url;
+                                                    link.setAttribute('download', `invoice_${inv.invoice_number}.pdf`);
+                                                    document.body.appendChild(link);
+                                                    link.click();
+                                                    link.remove();
+                                                } catch (err) {
+                                                    console.error("Failed to download PDF", err);
+                                                    alert("Failed to download PDF");
+                                                }
+                                            }}
+                                            className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                                            title="Download PDF"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                        </button>
                                     </td>
                                 </tr>
                             ))}

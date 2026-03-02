@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,6 +7,7 @@ import * as z from "zod";
 import { format } from "date-fns";
 import api from "../lib/axios";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { RoleGuard } from "../components/RoleGuard";
 
 const periodSchema = z.object({
     name: z.string().min(3),
@@ -34,20 +36,38 @@ export default function FiscalPeriods() {
             return await api.post("/periods/", newPeriod);
         },
         onSuccess: () => {
+            toast.success("Fiscal period opened successfully");
             queryClient.invalidateQueries({ queryKey: ["periods"] });
             setIsModalOpen(false);
             form.reset();
         },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to open fiscal period");
+        }
     });
 
     const closeMutation = useMutation({
         mutationFn: async (id: number) => await api.patch(`/periods/${id}/close`),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["periods"] }),
+        onSuccess: () => {
+            toast.success("Fiscal period closed successfully");
+            queryClient.invalidateQueries({ queryKey: ["periods"] });
+            setConfirmAction(null);
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to close fiscal period");
+        }
     });
 
     const lockMutation = useMutation({
         mutationFn: async (id: number) => await api.patch(`/periods/${id}/lock`),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["periods"] }),
+        onSuccess: () => {
+            toast.success("Fiscal period locked successfully");
+            queryClient.invalidateQueries({ queryKey: ["periods"] });
+            setConfirmAction(null);
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to lock fiscal period");
+        }
     });
 
     const form = useForm<PeriodFormValues>({
@@ -61,9 +81,11 @@ export default function FiscalPeriods() {
         <div className="p-6">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Fiscal Periods</h1>
-                <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
-                    + Open New Month
-                </button>
+                <RoleGuard allowedRoles={['admin', 'controller']}>
+                    <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
+                        + Open New Month
+                    </button>
+                </RoleGuard>
             </div>
 
             {isLoading ? (
@@ -96,14 +118,18 @@ export default function FiscalPeriods() {
                                     </td>
                                     <td className="px-6 py-4 text-sm flex gap-3">
                                         {period.status === "OPEN" && (
-                                            <button onClick={() => setConfirmAction({ type: 'LOCK', id: period.id })} className="text-orange-600 dark:text-orange-400 hover:text-orange-900 dark:hover:text-orange-300 font-medium whitespace-nowrap">
-                                                Lock Period
-                                            </button>
+                                            <RoleGuard allowedRoles={['admin', 'controller']}>
+                                                <button onClick={() => setConfirmAction({ type: 'LOCK', id: period.id })} className="text-orange-600 dark:text-orange-400 hover:text-orange-900 dark:hover:text-orange-300 font-medium whitespace-nowrap">
+                                                    Lock Period
+                                                </button>
+                                            </RoleGuard>
                                         )}
                                         {period.status !== "CLOSED" && (
-                                            <button onClick={() => setConfirmAction({ type: 'CLOSE', id: period.id })} className="text-rose-600 dark:text-rose-400 hover:text-rose-900 dark:hover:text-rose-300 font-medium whitespace-nowrap">
-                                                Hard Close
-                                            </button>
+                                            <RoleGuard allowedRoles={['admin', 'controller']}>
+                                                <button onClick={() => setConfirmAction({ type: 'CLOSE', id: period.id })} className="text-rose-600 dark:text-rose-400 hover:text-rose-900 dark:hover:text-rose-300 font-medium whitespace-nowrap">
+                                                    Hard Close
+                                                </button>
+                                            </RoleGuard>
                                         )}
                                     </td>
                                 </tr>

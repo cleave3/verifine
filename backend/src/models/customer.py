@@ -1,4 +1,6 @@
 from typing import Optional, List
+import uuid
+from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
 from enum import Enum
 
@@ -10,6 +12,7 @@ class CustomerStatus(str, Enum):
 
 class Customer(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    org_id: uuid.UUID = Field(foreign_key="organization.id")
     name: str = Field(index=True)
     email: Optional[str] = None
     phone: Optional[str] = None

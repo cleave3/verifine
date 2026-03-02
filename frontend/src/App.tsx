@@ -15,6 +15,9 @@ import Customers from "./pages/Customers";
 import Invoices from "./pages/Invoices";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import Users from "./pages/Users";
+import Profile from "./pages/Profile";
+import AuditLog from "./pages/AuditLog";
 import { useCurrencyStore } from "./store/currencyStore";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -59,6 +62,9 @@ function App() {
             <Route path="ar/invoices" element={<Invoices />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="users" element={<Users />} />
+            <Route path="audit" element={<AuditLog />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

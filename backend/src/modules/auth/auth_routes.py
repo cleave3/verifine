@@ -23,7 +23,12 @@ async def register(
     return response(
         201,
         "User created successfully",
-        {"id": user.id, "email": user.email, "full_name": user.full_name},
+        {
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "org_id": str(user.org_id),
+        },
     )
 
 
@@ -37,8 +42,8 @@ async def login(
     if not user or not verify_password(request.password, user.hashed_password):
         raise BadRequest("Incorrect email or password")
 
-    access_token = create_access_token(user.id)
-    refresh_token = create_refresh_token(user.id)
+    access_token = create_access_token(user.id, org_id=str(user.org_id))
+    refresh_token = create_refresh_token(user.id, org_id=str(user.org_id))
 
     res.set_cookie(
         key="access_token",
@@ -58,7 +63,13 @@ async def login(
     return response(
         200,
         "Login successful",
-        {"id": user.id, "email": user.email, "full_name": user.full_name},
+        {
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "role": user.role,
+            "org_id": str(user.org_id),
+        },
     )
 
 
@@ -87,7 +98,13 @@ async def get_me(
         return response(
             200,
             "Current User",
-            {"id": user.id, "email": user.email, "full_name": user.full_name},
+            {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "role": user.role,
+                "org_id": str(user.org_id),
+            },
         )
     except JWTError:
         raise BadRequest("Invalid token")

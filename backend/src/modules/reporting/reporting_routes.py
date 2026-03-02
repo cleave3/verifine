@@ -1,7 +1,9 @@
+import uuid
 from fastapi import APIRouter, Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select, func
+from sqlmodel import select, func, and_
 from sqlalchemy.orm import selectinload
+from src.core.tenant import get_current_org
 
 from src.core.database import get_session
 from src.core.errors import BadRequest
@@ -23,9 +25,14 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 @router.get("/trial-balance/{period_id}")
 async def get_trial_balance(
-    period_id: int, session: AsyncSession = Depends(get_session)
+    period_id: int,
+    session: AsyncSession = Depends(get_session),
+    org_id: uuid.UUID = Depends(get_current_org),
 ):
-    period = await session.get(FiscalPeriod, period_id)
+    stmt = select(FiscalPeriod).where(
+        and_(FiscalPeriod.id == period_id, FiscalPeriod.org_id == org_id)
+    )
+    period = (await session.exec(stmt)).first()
     if not period:
         raise BadRequest("Fiscal period not found")
 
@@ -39,6 +46,7 @@ async def get_trial_balance(
         .join(LedgerLine, LedgerLine.account_id == Account.id)
         .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
         .where(JournalEntry.period_id == period_id)
+        .where(Account.org_id == org_id)
         .group_by(Account.id)
         .order_by(Account.code)
     )
@@ -98,9 +106,14 @@ async def get_trial_balance(
 
 @router.get("/profit-and-loss/{period_id}")
 async def get_profit_and_loss(
-    period_id: int, session: AsyncSession = Depends(get_session)
+    period_id: int,
+    session: AsyncSession = Depends(get_session),
+    org_id: uuid.UUID = Depends(get_current_org),
 ):
-    period = await session.get(FiscalPeriod, period_id)
+    stmt_fp = select(FiscalPeriod).where(
+        and_(FiscalPeriod.id == period_id, FiscalPeriod.org_id == org_id)
+    )
+    period = (await session.exec(stmt_fp)).first()
     if not period:
         raise BadRequest("Fiscal period not found")
 
@@ -114,6 +127,7 @@ async def get_profit_and_loss(
         .join(LedgerLine, LedgerLine.account_id == Account.id)
         .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
         .where(JournalEntry.period_id == period_id)
+        .where(Account.org_id == org_id)
         .where(Account.type == AccountType.REVENUE)
         .group_by(Account.id)
         .order_by(Account.code)
@@ -129,6 +143,7 @@ async def get_profit_and_loss(
         .join(LedgerLine, LedgerLine.account_id == Account.id)
         .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
         .where(JournalEntry.period_id == period_id)
+        .where(Account.org_id == org_id)
         .where(Account.type == AccountType.EXPENSE)
         .group_by(Account.id)
         .order_by(Account.code)
@@ -177,9 +192,14 @@ async def get_profit_and_loss(
 
 @router.get("/balance-sheet/{period_id}")
 async def get_balance_sheet(
-    period_id: int, session: AsyncSession = Depends(get_session)
+    period_id: int,
+    session: AsyncSession = Depends(get_session),
+    org_id: uuid.UUID = Depends(get_current_org),
 ):
-    period = await session.get(FiscalPeriod, period_id)
+    stmt_fp = select(FiscalPeriod).where(
+        and_(FiscalPeriod.id == period_id, FiscalPeriod.org_id == org_id)
+    )
+    period = (await session.exec(stmt_fp)).first()
     if not period:
         raise BadRequest("Fiscal period not found")
 
@@ -199,6 +219,7 @@ async def get_balance_sheet(
         .join(LedgerLine, LedgerLine.account_id == Account.id)
         .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
         .where(JournalEntry.entry_date <= end_date)
+        .where(Account.org_id == org_id)
         .group_by(Account.id)
         .order_by(Account.code)
     )

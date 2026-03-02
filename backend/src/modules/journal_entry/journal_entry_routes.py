@@ -1,11 +1,15 @@
+import uuid
 from fastapi import APIRouter, Depends, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 from jose import jwt, JWTError
+from src.core.tenant import get_current_org
 
 from src.core.database import get_session
 from src.core.errors import BadRequest
 from src.core.config import Config
 from src.utils.common import response
+from src.core.security_roles import role_required
+from src.models.user import User, UserRole
 from src.modules.journal_entry.journal_entry_schema import JournalEntryCreate
 from src.modules.journal_entry.journal_entry_service import (
     JournalEntryService,
@@ -15,20 +19,10 @@ from src.modules.journal_entry.journal_entry_service import (
 router = APIRouter(prefix="/journal-entries", tags=["journal_entries"])
 
 
-async def get_current_user_id(request: Request) -> int:
-    token = request.cookies.get("access_token")
-    if not token:
-        raise BadRequest("Not authenticated")
-    try:
-        payload = jwt.decode(token, Config.SECRET_KEY, algorithms=[Config.ALGORITHM])
-        return int(payload.get("sub"))
-    except JWTError:
-        raise BadRequest("Invalid authentication token")
-
-
 from datetime import date
 from typing import Optional
 from src.models.journal_entry import JournalEntryStatus
+
 
 @router.get("/")
 async def list_journal_entries(
@@ -38,13 +32,15 @@ async def list_journal_entries(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     je_service: JournalEntryService = Depends(get_journal_entry_service),
+    org_id: uuid.UUID = Depends(get_current_org),
 ):
     entries = await je_service.get_journal_entries(
-        page=page, 
-        page_size=page_size, 
-        status=status, 
-        start_date=start_date, 
-        end_date=end_date
+        org_id=org_id,
+        page=page,
+        page_size=page_size,
+        status=status,
+        start_date=start_date,
+        end_date=end_date,
     )
 
     data = []
@@ -53,20 +49,42 @@ async def list_journal_entries(
         je_dict["lines"] = [line.model_dump() for line in entry.lines]
         data.append(je_dict)
 
-    return response(200, "Journal entries retrieved successfully", data={"results": data, "page_info": entries["meta"]})
+    return response(
+        200,
+        "Journal entries retrieved successfully",
+        data={"results": data, "page_info": entries["meta"]},
+    )
 
 
 @router.post("/")
 async def create_journal_entry(
-    je_in: JournalEntryCreate,
     request: Request,
+    je_in: JournalEntryCreate,
     je_service: JournalEntryService = Depends(get_journal_entry_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(
+        role_required([UserRole.ADMIN, UserRole.CONTROLLER, UserRole.ACCOUNTANT])
+    ),
+    session: AsyncSession = Depends(get_session),
 ):
-    user_id = await get_current_user_id(request)
+    from src.core.audit import log_audit_event
 
-    entry = await je_service.create_journal_entry(je_in, user_id)
+    entry = await je_service.create_journal_entry(org_id, je_in, current_user.id)
 
     je_dict = entry.model_dump()
     je_dict["lines"] = [line.model_dump() for line in entry.lines]
+
+    client_ip = request.client.host if request.client else None
+    await log_audit_event(
+        session=session,
+        org_id=org_id,
+        user_id=current_user.id,
+        action="POST_JOURNAL_ENTRY",
+        entity_type="JournalEntry",
+        entity_id=str(entry.id),
+        new_state=je_dict,
+        ip_address=client_ip,
+    )
+    await session.commit()
 
     return response(201, "Journal entry posted successfully", je_dict)

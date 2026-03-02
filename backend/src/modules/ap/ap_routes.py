@@ -1,5 +1,7 @@
+import uuid
 from fastapi import APIRouter, Depends, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
+from src.core.tenant import get_current_org
 
 from src.core.database import get_session
 from src.core.errors import BadRequest
@@ -11,14 +13,19 @@ from src.modules.ap.ap_service import (
     get_vendor_service,
     get_bill_service,
 )
+from src.core.security_roles import get_current_user
+from src.models.user import User
 
 router = APIRouter(prefix="/ap", tags=["ap"])
 
 
 # --- VENDORS ---
 @router.get("/vendors")
-async def list_vendors(vendor_service: VendorService = Depends(get_vendor_service)):
-    vendors = await vendor_service.get_vendors()
+async def list_vendors(
+    vendor_service: VendorService = Depends(get_vendor_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+):
+    vendors = await vendor_service.get_vendors(org_id)
     return response(
         200, "Vendors retrieved successfully", [v.model_dump() for v in vendors]
     )
@@ -26,9 +33,12 @@ async def list_vendors(vendor_service: VendorService = Depends(get_vendor_servic
 
 @router.post("/vendors")
 async def create_vendor(
-    vendor_in: VendorCreate, vendor_service: VendorService = Depends(get_vendor_service)
+    vendor_in: VendorCreate,
+    vendor_service: VendorService = Depends(get_vendor_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(get_current_user),
 ):
-    vendor = await vendor_service.create_vendor(vendor_in)
+    vendor = await vendor_service.create_vendor(org_id, vendor_in, current_user.id)
     return response(201, "Vendor created successfully", vendor.model_dump())
 
 
@@ -37,8 +47,10 @@ async def update_vendor(
     id: int,
     vendor_in: VendorUpdate,
     vendor_service: VendorService = Depends(get_vendor_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(get_current_user),
 ):
-    updated = await vendor_service.update_vendor(id, vendor_in)
+    updated = await vendor_service.update_vendor(org_id, id, vendor_in, current_user.id)
     if not updated:
         raise BadRequest("Vendor not found")
     return response(200, "Vendor updated successfully", updated.model_dump())
@@ -59,8 +71,10 @@ async def list_bills(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     bill_service: BillService = Depends(get_bill_service),
+    org_id: uuid.UUID = Depends(get_current_org),
 ):
     bills = await bill_service.get_bills(
+        org_id=org_id,
         page=page,
         page_size=page_size,
         status=status,
@@ -84,9 +98,12 @@ async def list_bills(
 
 @router.post("/bills")
 async def create_bill(
-    bill_in: BillCreate, bill_service: BillService = Depends(get_bill_service)
+    bill_in: BillCreate,
+    bill_service: BillService = Depends(get_bill_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(get_current_user),
 ):
-    bill = await bill_service.create_bill(bill_in)
+    bill = await bill_service.create_bill(org_id, bill_in, current_user.id)
 
     bill_dict = bill.model_dump()
     bill_dict["lines"] = [line.model_dump() for line in bill.lines]
@@ -95,8 +112,13 @@ async def create_bill(
 
 
 @router.patch("/bills/{id}/approve")
-async def approve_bill(id: int, bill_service: BillService = Depends(get_bill_service)):
-    bill = await bill_service.approve_bill(id)
+async def approve_bill(
+    id: int,
+    bill_service: BillService = Depends(get_bill_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(get_current_user),
+):
+    bill = await bill_service.approve_bill(org_id, id, current_user.id)
     if not bill:
         raise BadRequest("Bill not found")
 
@@ -106,15 +128,20 @@ async def approve_bill(id: int, bill_service: BillService = Depends(get_bill_ser
     return response(200, "Bill approved successfully", bill_dict)
 
 
+from src.models.user import UserRole
+from src.core.security_roles import role_required
+
+
 @router.patch("/bills/{id}/post")
 async def post_bill(
-    id: int, request: Request, bill_service: BillService = Depends(get_bill_service)
+    id: int,
+    current_user: User = Depends(role_required([UserRole.ADMIN, UserRole.ACCOUNTANT])),
+    bill_service: BillService = Depends(get_bill_service),
+    org_id: uuid.UUID = Depends(get_current_org),
 ):
-    from src.modules.journal_entry.journal_entry_routes import get_current_user_id
+    user_id = current_user.id
 
-    user_id = await get_current_user_id(request)
-
-    bill = await bill_service.post_bill(id, user_id)
+    bill = await bill_service.post_bill(org_id, id, user_id)
     if not bill:
         raise BadRequest("Bill not found")
 
@@ -128,9 +155,12 @@ async def post_bill(
 
 @router.patch("/bills/{id}/pay")
 async def mark_bill_paid(
-    id: int, bill_service: BillService = Depends(get_bill_service)
+    id: int,
+    bill_service: BillService = Depends(get_bill_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(get_current_user),
 ):
-    bill = await bill_service.mark_paid(id)
+    bill = await bill_service.mark_paid(org_id, id, current_user.id)
     if not bill:
         raise BadRequest("Bill not found")
 

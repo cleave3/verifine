@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,10 +34,14 @@ export default function Customers() {
             return await api.post("/ar/customers/", payload);
         },
         onSuccess: () => {
+            toast.success("Customer added successfully");
             queryClient.invalidateQueries({ queryKey: ["customers"] });
             setIsModalOpen(false);
             form.reset();
         },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to add customer");
+        }
     });
 
     const form = useForm<any>({
@@ -91,7 +96,7 @@ export default function Customers() {
             )}
 
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black/50 z-100 flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-md shadow-2xl">
                         <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Add Customer</h2>
                         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

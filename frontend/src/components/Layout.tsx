@@ -1,11 +1,12 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon, Menu, X } from "lucide-react";
+import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon, Menu, X, FileText, Receipt, User as UserIcon, Activity } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { RoleGuard } from "./RoleGuard";
 
 export default function Layout() {
-    const { user, logout } = useAuthStore();
+    const { user, currentOrg, logout } = useAuthStore();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -100,7 +101,7 @@ export default function Layout() {
                                 Vendors
                             </Link>
                             <Link to="/ap/bills" onClick={closeMobileMenu} className={linkClass("/ap/bills")}>
-                                <BookOpen className={iconClass("/ap/bills")} />
+                                <Receipt className={iconClass("/ap/bills")} />
                                 Bills
                             </Link>
                         </div>
@@ -112,13 +113,25 @@ export default function Layout() {
                                 Customers
                             </Link>
                             <Link to="/ar/invoices" onClick={closeMobileMenu} className={linkClass("/ar/invoices")}>
-                                <BookOpen className={iconClass("/ar/invoices")} />
+                                <FileText className={iconClass("/ar/invoices")} />
                                 Invoices
                             </Link>
                         </div>
 
                         <div className="pt-4 mt-2 border-t border-slate-700/50">
                             <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">System</p>
+                            <RoleGuard allowedRoles={['admin', 'controller']}>
+                                <Link to="/audit" onClick={closeMobileMenu} className={linkClass("/audit")}>
+                                    <Activity className={iconClass("/audit")} />
+                                    Audit Log
+                                </Link>
+                            </RoleGuard>
+                            <RoleGuard allowedRoles={['admin']}>
+                                <Link to="/users" onClick={closeMobileMenu} className={linkClass("/users")}>
+                                    <Users className={iconClass("/users")} />
+                                    Team Management
+                                </Link>
+                            </RoleGuard>
                             <Link to="/settings" onClick={closeMobileMenu} className={linkClass("/settings")}>
                                 <SettingsIcon className={iconClass("/settings")} />
                                 Settings
@@ -127,15 +140,18 @@ export default function Layout() {
                     </nav>
                 </div>
                 <div className="p-4 border-t border-slate-800 shrink-0">
-                    <div className="flex items-center mb-4">
-                        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold">
+                    <Link to="/profile" onClick={closeMobileMenu} className="flex items-center mb-4 p-2 -mx-2 rounded-md hover:bg-slate-800 transition-colors cursor-pointer group">
+                        <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold group-hover:bg-indigo-500 transition-colors relative">
                             {user?.full_name?.charAt(0) || user?.email.charAt(0).toUpperCase()}
+                            <div className="absolute -bottom-1 -right-1 bg-slate-800 rounded-full p-0.5">
+                                <UserIcon className="w-3 h-3 text-indigo-400 group-hover:text-white" />
+                            </div>
                         </div>
                         <div className="ml-3 truncate">
-                            <p className="text-sm font-medium text-white truncate">{user?.full_name || "Accountant"}</p>
+                            <p className="text-sm font-medium text-white truncate">{user?.full_name || "User"}</p>
                             <p className="text-xs text-slate-400 truncate">{user?.email}</p>
                         </div>
-                    </div>
+                    </Link>
                     <button
                         onClick={handleLogout}
                         className="flex w-full items-center px-3 py-2 text-sm font-medium rounded-md text-slate-300 hover:bg-red-500/10 hover:text-red-400 transition group"
@@ -147,19 +163,15 @@ export default function Layout() {
             </aside>
 
             {/* Main content */}
-            <main className="flex-1 overflow-y-auto w-full flex flex-col min-w-0">
-                <header className="bg-white dark:bg-slate-950 shadow-sm h-16 flex items-center justify-between px-4 sm:px-8 shrink-0 transition-colors">
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => setIsMobileMenuOpen(true)}
-                            className="p-2 -ml-2 rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 md:hidden transition-colors"
-                        >
-                            <Menu className="w-5 h-5" />
-                        </button>
-                        <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100 truncate">
+            <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+                <header className="bg-white dark:bg-slate-950 shadow-sm h-16 flex items-center justify-between px-4 sm:px-8 shrink-0 transition-colors z-20">
+                    <div className="flex flex-col justify-center">
+                        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate tracking-tight">
                             Workspace
                         </h1>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 -mt-1 truncate max-w-[200px]">{currentOrg?.name || 'Verifine'}</span>
                     </div>
+
                     <button
                         onClick={toggleTheme}
                         className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors shrink-0"
@@ -169,12 +181,39 @@ export default function Layout() {
                     </button>
                 </header>
 
-                <div className="h-[calc(100vh-4rem)] overflow-y-auto pb-10">
+                <main className="flex-1 overflow-y-auto pb-20 md:pb-10 relative">
                     <ErrorBoundary>
                         <Outlet />
                     </ErrorBoundary>
-                </div>
-            </main>
+                </main>
+            </div>
+
+            {/* Bottom Mobile Navigation */}
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 z-30 flex justify-around items-center h-16 px-1 safe-area-pb">
+                <Link to="/" className={`flex flex-col items-center justify-center w-full h-full ${isActive('/') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'}`}>
+                    <LayoutDashboard className="w-[22px] h-[22px] mb-1" />
+                    <span className="text-[10px] font-medium leading-none">Home</span>
+                </Link>
+                <Link to="/ar/invoices" className={`flex flex-col items-center justify-center w-full h-full ${isActive('/ar/invoices') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'}`}>
+                    <FileText className="w-[22px] h-[22px] mb-1" />
+                    <span className="text-[10px] font-medium leading-none">Invoices</span>
+                </Link>
+                <Link to="/ap/bills" className={`flex flex-col items-center justify-center w-full h-full ${isActive('/ap/bills') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'}`}>
+                    <Receipt className="w-[22px] h-[22px] mb-1" />
+                    <span className="text-[10px] font-medium leading-none">Bills</span>
+                </Link>
+                <Link to="/reports" className={`flex flex-col items-center justify-center w-full h-full ${isActive('/reports') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'}`}>
+                    <BarChart3 className="w-[22px] h-[22px] mb-1" />
+                    <span className="text-[10px] font-medium leading-none">Reports</span>
+                </Link>
+                <button
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="flex flex-col items-center justify-center w-full h-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                    <Menu className="w-[22px] h-[22px] mb-1" />
+                    <span className="text-[10px] font-medium leading-none">Menu</span>
+                </button>
+            </nav>
         </div>
     );
 }

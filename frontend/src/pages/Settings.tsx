@@ -2,12 +2,15 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../lib/axios";
 import { useCurrencyStore } from "../store/currencyStore";
+import { useAuthStore } from "../store/authStore";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import toast from "react-hot-toast";
+import { RoleGuard } from "../components/RoleGuard";
 
 export default function Settings() {
     const queryClient = useQueryClient();
     const { fetchSettingsAndRates } = useCurrencyStore();
+    const { currentOrg, refreshOrg } = useAuthStore();
     const [isConfirmLockedOpen, setIsConfirmLockedOpen] = useState(false);
     const [isConfirmCurrencyOpen, setIsConfirmCurrencyOpen] = useState(false);
     const [isConfirmRatesOpen, setIsConfirmRatesOpen] = useState(false);
@@ -20,6 +23,15 @@ export default function Settings() {
     const settings = settingsRes?.data;
     const [selectedCurrency, setSelectedCurrency] = useState("NGN");
 
+    const [orgProfile, setOrgProfile] = useState({
+        name: "",
+        slug: "",
+        address: "",
+        tax_id: "",
+        logo_url: "",
+        primary_color: "#4f46e5"
+    });
+
     // Exchange rates local state
     const { activeRates } = useCurrencyStore();
     const [localRates, setLocalRates] = useState<Record<string, string>>({});
@@ -29,6 +41,19 @@ export default function Settings() {
             setSelectedCurrency(settings.base_currency_code);
         }
     }, [settings]);
+
+    useEffect(() => {
+        if (currentOrg) {
+            setOrgProfile({
+                name: currentOrg.name || "",
+                slug: currentOrg.slug || "",
+                address: currentOrg.address || "",
+                tax_id: currentOrg.tax_id || "",
+                logo_url: currentOrg.logo_url || "",
+                primary_color: currentOrg.primary_color || "#4f46e5"
+            });
+        }
+    }, [currentOrg]);
 
     useEffect(() => {
         // Initialize local rates from store
@@ -45,6 +70,20 @@ export default function Settings() {
             await queryClient.invalidateQueries({ queryKey: ["settings"] });
             await fetchSettingsAndRates(); // Update global store
             toast.success("Settings updated successfully!");
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to update settings");
+        }
+    });
+
+    const updateOrgMutation = useMutation({
+        mutationFn: async (data: any) => await api.patch("/organizations/me", data),
+        onSuccess: async () => {
+            await refreshOrg();
+            toast.success("Organization details updated successfully!");
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to update organization");
         }
     });
 
@@ -54,6 +93,10 @@ export default function Settings() {
             await queryClient.invalidateQueries({ queryKey: ["settings"] });
             await fetchSettingsAndRates(); // Update global store
             setIsConfirmLockedOpen(false);
+            toast.success("Base currency locked successfully!");
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to lock currency");
         }
     });
 
@@ -62,6 +105,9 @@ export default function Settings() {
         onSuccess: async () => {
             await fetchSettingsAndRates(); // Will refetch rates from backend
             toast.success("Exchange rates updated successfully!");
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to update exchange rates");
         }
     });
 
@@ -84,7 +130,90 @@ export default function Settings() {
         <div className="p-6 mx-auto">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-gray-100 mb-6">Company Settings</h1>
 
-            <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-slate-200 dark:border-slate-700">
+            <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-slate-200 dark:border-slate-700 mb-6">
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-gray-200 mb-4">Organization Profile</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Company Name</label>
+                        <input
+                            type="text"
+                            value={orgProfile.name}
+                            onChange={(e) => setOrgProfile(prev => ({ ...prev, name: e.target.value }))}
+                            className="block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Company Slug</label>
+                        <input
+                            type="text"
+                            value={orgProfile.slug}
+                            onChange={(e) => setOrgProfile(prev => ({ ...prev, slug: e.target.value }))}
+                            className="block w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 text-slate-500 rounded-md p-2"
+                            disabled
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Physical Address</label>
+                        <input
+                            type="text"
+                            value={orgProfile.address}
+                            onChange={(e) => setOrgProfile(prev => ({ ...prev, address: e.target.value }))}
+                            className="block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tax ID</label>
+                        <input
+                            type="text"
+                            value={orgProfile.tax_id}
+                            onChange={(e) => setOrgProfile(prev => ({ ...prev, tax_id: e.target.value }))}
+                            className="block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Logo URL</label>
+                        <input
+                            type="text"
+                            placeholder="https://example.com/logo.png"
+                            value={orgProfile.logo_url}
+                            onChange={(e) => setOrgProfile(prev => ({ ...prev, logo_url: e.target.value }))}
+                            className="block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Primary Branding Color</label>
+                        <div className="flex gap-2">
+                            <input
+                                type="color"
+                                value={orgProfile.primary_color}
+                                onChange={(e) => setOrgProfile(prev => ({ ...prev, primary_color: e.target.value }))}
+                                className="h-10 w-20 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-md p-1 cursor-pointer"
+                            />
+                            <input
+                                type="text"
+                                value={orgProfile.primary_color}
+                                onChange={(e) => setOrgProfile(prev => ({ ...prev, primary_color: e.target.value }))}
+                                className="flex-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 font-mono uppercase"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <RoleGuard allowedRoles={['admin']}>
+                    <div className="flex justify-end">
+                        <button
+                            onClick={() => updateOrgMutation.mutate(orgProfile)}
+                            disabled={updateOrgMutation.isPending}
+                            className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition disabled:bg-slate-400"
+                        >
+                            {updateOrgMutation.isPending ? "Saving..." : "Save Profile"}
+                        </button>
+                    </div>
+                </RoleGuard>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-slate-200 dark:border-slate-700 mb-6">
                 <h2 className="text-lg font-semibold text-slate-800 dark:text-gray-200 mb-4">Currency Configuration</h2>
 
                 <div className="mb-6">
@@ -101,13 +230,15 @@ export default function Settings() {
                             <option value="GBP">GBP - British Pound</option>
                             <option value="EUR">EUR - Euro</option>
                         </select>
-                        <button
-                            onClick={() => setIsConfirmCurrencyOpen(true)}
-                            disabled={settings?.is_base_currency_locked || selectedCurrency === settings?.base_currency_code || updateMutation.isPending}
-                            className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition disabled:bg-slate-400"
-                        >
-                            Save Currency
-                        </button>
+                        <RoleGuard allowedRoles={['admin']}>
+                            <button
+                                onClick={() => setIsConfirmCurrencyOpen(true)}
+                                disabled={settings?.is_base_currency_locked || selectedCurrency === settings?.base_currency_code || updateMutation.isPending}
+                                className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition disabled:bg-slate-400"
+                            >
+                                Save Currency
+                            </button>
+                        </RoleGuard>
                     </div>
                     {settings?.is_base_currency_locked && (
                         <p className="text-sm text-rose-500 mt-2">The base currency is locked and cannot be changed.</p>
@@ -120,12 +251,14 @@ export default function Settings() {
                         <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
                             Locking the base currency prevents any future changes to it. This is typically done after initial setup to ensure accounting consistency.
                         </p>
-                        <button
-                            onClick={() => setIsConfirmLockedOpen(true)}
-                            className="bg-rose-100 text-rose-700 border border-rose-200 hover:bg-rose-200 px-4 py-2 rounded font-medium transition dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-900"
-                        >
-                            Lock Base Currency
-                        </button>
+                        <RoleGuard allowedRoles={['admin']}>
+                            <button
+                                onClick={() => setIsConfirmLockedOpen(true)}
+                                className="bg-rose-100 text-rose-700 border border-rose-200 hover:bg-rose-200 px-4 py-2 rounded font-medium transition dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-900"
+                            >
+                                Lock Base Currency
+                            </button>
+                        </RoleGuard>
                     </div>
                 )}
             </div>
@@ -155,15 +288,17 @@ export default function Settings() {
                     ))}
                 </div>
 
-                <div className="flex justify-end">
-                    <button
-                        onClick={() => setIsConfirmRatesOpen(true)}
-                        disabled={ratesMutation.isPending}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition disabled:bg-slate-400"
-                    >
-                        {ratesMutation.isPending ? "Saving..." : "Save Exchange Rates"}
-                    </button>
-                </div>
+                <RoleGuard allowedRoles={['admin', 'controller', 'accountant']}>
+                    <div className="flex justify-end">
+                        <button
+                            onClick={() => setIsConfirmRatesOpen(true)}
+                            disabled={ratesMutation.isPending}
+                            className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition disabled:bg-slate-400"
+                        >
+                            {ratesMutation.isPending ? "Saving..." : "Save Exchange Rates"}
+                        </button>
+                    </div>
+                </RoleGuard>
             </div>
 
             <ConfirmDialog

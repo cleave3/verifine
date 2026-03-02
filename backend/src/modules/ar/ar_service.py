@@ -1,8 +1,9 @@
 from typing import Sequence, Optional
+import uuid
 from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 from datetime import date
-from sqlmodel import func, select
+from sqlmodel import func, select, and_
 from sqlalchemy.orm import selectinload
 
 from src.utils.common import get_pagination_meta
@@ -19,34 +20,63 @@ from src.modules.journal_entry.journal_entry_schema import (
 )
 from src.modules.journal_entry.journal_entry_service import JournalEntryService
 from src.core.errors import BadRequest
+from src.core.audit import log_audit_event
 
 
 class CustomerService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_customers(self) -> Sequence[Customer]:
-        statement = select(Customer).order_by(Customer.name)
+    async def get_customers(self, org_id: uuid.UUID) -> Sequence[Customer]:
+        statement = (
+            select(Customer).where(Customer.org_id == org_id).order_by(Customer.name)
+        )
         results = await self.session.exec(statement)
         return results.all()
 
-    async def get_customer_by_id(self, customer_id: int) -> Optional[Customer]:
-        return await self.session.get(Customer, customer_id)
+    async def get_customer_by_id(
+        self, org_id: uuid.UUID, customer_id: int
+    ) -> Optional[Customer]:
+        statement = select(Customer).where(
+            and_(Customer.id == customer_id, Customer.org_id == org_id)
+        )
+        result = await self.session.exec(statement)
+        return result.first()
 
-    async def create_customer(self, customer_in: CustomerCreate) -> Customer:
-        db_customer = Customer(**customer_in.model_dump())
+    async def create_customer(
+        self, org_id: uuid.UUID, customer_in: CustomerCreate, user_id: int
+    ) -> Customer:
+        db_customer = Customer(**customer_in.model_dump(), org_id=org_id)
         self.session.add(db_customer)
         await self.session.commit()
         await self.session.refresh(db_customer)
+
+        await log_audit_event(
+            session=self.session,
+            org_id=org_id,
+            user_id=user_id,
+            action="CREATE_CUSTOMER",
+            entity_type="Customer",
+            entity_id=str(db_customer.id),
+            previous_state=None,
+            new_state=db_customer.model_dump(),
+        )
+        await self.session.commit()
+
         return db_customer
 
     async def update_customer(
-        self, customer_id: int, customer_in: CustomerUpdate
+        self,
+        org_id: uuid.UUID,
+        customer_id: int,
+        customer_in: CustomerUpdate,
+        user_id: int,
     ) -> Optional[Customer]:
-        db_customer = await self.get_customer_by_id(customer_id)
+        db_customer = await self.get_customer_by_id(org_id, customer_id)
         if not db_customer:
             return None
 
+        prev_state = db_customer.model_dump()
         update_data = customer_in.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(db_customer, key, value)
@@ -54,6 +84,19 @@ class CustomerService:
         self.session.add(db_customer)
         await self.session.commit()
         await self.session.refresh(db_customer)
+
+        await log_audit_event(
+            session=self.session,
+            org_id=org_id,
+            user_id=user_id,
+            action="UPDATE_CUSTOMER",
+            entity_type="Customer",
+            entity_id=str(db_customer.id),
+            previous_state=prev_state,
+            new_state=db_customer.model_dump(),
+        )
+        await self.session.commit()
+
         return db_customer
 
 
@@ -63,6 +106,7 @@ class InvoiceService:
 
     async def get_invoices(
         self,
+        org_id: uuid.UUID,
         page: int = 1,
         page_size: int = 10,
         status: Optional[InvoiceStatus] = None,
@@ -76,7 +120,7 @@ class InvoiceService:
             .order_by(Invoice.invoice_date.desc(), Invoice.id.desc())
         )
 
-        total_statement = select(func.count(Invoice.id))
+        total_statement = select(func.count(Invoice.id)).where(Invoice.org_id == org_id)
 
         if status:
             statement = statement.where(Invoice.status == status)
@@ -105,18 +149,25 @@ class InvoiceService:
             "meta": get_pagination_meta(page, page_size, total_records),
         }
 
-    async def get_invoice_by_id(self, invoice_id: int) -> Optional[Invoice]:
+    async def get_invoice_by_id(
+        self, org_id: uuid.UUID, invoice_id: int
+    ) -> Optional[Invoice]:
         statement = (
             select(Invoice)
-            .where(Invoice.id == invoice_id)
+            .where(and_(Invoice.id == invoice_id, Invoice.org_id == org_id))
             .options(selectinload(Invoice.lines))
         )
         result = await self.session.exec(statement)
         return result.first()
 
-    async def create_invoice(self, invoice_in: InvoiceCreate) -> Invoice:
+    async def create_invoice(
+        self, org_id: uuid.UUID, invoice_in: InvoiceCreate, user_id: int
+    ) -> Invoice:
         # Verify Customer
-        customer = await self.session.get(Customer, invoice_in.customer_id)
+        customer_service = CustomerService(self.session)
+        customer = await customer_service.get_customer_by_id(
+            org_id, invoice_in.customer_id
+        )
         if not customer:
             raise BadRequest("Invalid customer ID")
 
@@ -134,6 +185,7 @@ class InvoiceService:
             exchange_rate=invoice_in.exchange_rate,
             total_amount=total_amount,
             base_total_amount=base_total_amount,
+            org_id=org_id,
         )
         self.session.add(db_invoice)
         await self.session.flush()
@@ -150,14 +202,31 @@ class InvoiceService:
                 description=line_in.description,
                 amount=line_in.amount,
                 base_amount=base_amount,
+                org_id=org_id,
             )
             self.session.add(db_line)
 
         await self.session.commit()
-        return await self.get_invoice_by_id(db_invoice.id)
 
-    async def mark_sent(self, invoice_id: int) -> Optional[Invoice]:
-        db_invoice = await self.get_invoice_by_id(invoice_id)
+        full_invoice = await self.get_invoice_by_id(org_id, db_invoice.id)
+        await log_audit_event(
+            session=self.session,
+            org_id=org_id,
+            user_id=user_id,
+            action="CREATE_INVOICE",
+            entity_type="Invoice",
+            entity_id=str(db_invoice.id),
+            previous_state=None,
+            new_state=full_invoice.model_dump(),
+        )
+        await self.session.commit()
+
+        return full_invoice
+
+    async def mark_sent(
+        self, org_id: uuid.UUID, invoice_id: int, user_id: int
+    ) -> Optional[Invoice]:
+        db_invoice = await self.get_invoice_by_id(org_id, invoice_id)
         if not db_invoice:
             return None
 
@@ -166,13 +235,29 @@ class InvoiceService:
                 f"Cannot mark invoice as sent from status {db_invoice.status}"
             )
 
+        prev_state = db_invoice.model_dump()
         db_invoice.status = InvoiceStatus.SENT
         self.session.add(db_invoice)
         await self.session.commit()
+
+        await log_audit_event(
+            session=self.session,
+            org_id=org_id,
+            user_id=user_id,
+            action="MARK_INVOICE_SENT",
+            entity_type="Invoice",
+            entity_id=str(db_invoice.id),
+            previous_state=prev_state,
+            new_state=db_invoice.model_dump(),
+        )
+        await self.session.commit()
+
         return db_invoice
 
-    async def post_invoice(self, invoice_id: int, user_id: int) -> Optional[Invoice]:
-        db_invoice = await self.get_invoice_by_id(invoice_id)
+    async def post_invoice(
+        self, org_id: uuid.UUID, invoice_id: int, user_id: int
+    ) -> Optional[Invoice]:
+        db_invoice = await self.get_invoice_by_id(org_id, invoice_id)
         if not db_invoice:
             return None
 
@@ -182,13 +267,19 @@ class InvoiceService:
             )
 
         # 1. Find AR Account (assumed to be 1200 - Accounts Receivable)
-        stmt = select(Account).where(Account.code == "1200")
+        stmt = select(Account).where(
+            and_(Account.code == "1200", Account.org_id == org_id)
+        )
         ar_act = (await self.session.exec(stmt)).first()
         if not ar_act:
             raise BadRequest("Accounts Receivable account (1200) not found.")
 
         # 2. Find Open Period
-        stmt = select(FiscalPeriod).where(FiscalPeriod.status == PeriodStatus.OPEN)
+        stmt = select(FiscalPeriod).where(
+            and_(
+                FiscalPeriod.status == PeriodStatus.OPEN, FiscalPeriod.org_id == org_id
+            )
+        )
         period = (await self.session.exec(stmt)).first()
         if not period:
             raise BadRequest("No OPEN fiscal period found to post to.")
@@ -234,18 +325,33 @@ class InvoiceService:
         )
 
         je_service = JournalEntryService(self.session)
-        je = await je_service.create_journal_entry(je_create, user_id)
+        je = await je_service.create_journal_entry(org_id, je_create, user_id)
 
         # 5. Link and Update Invoice Status
+        prev_state = db_invoice.model_dump()
         db_invoice.journal_entry_id = je.id
         db_invoice.status = InvoiceStatus.POSTED
         self.session.add(db_invoice)
         await self.session.commit()
 
+        await log_audit_event(
+            session=self.session,
+            org_id=org_id,
+            user_id=user_id,
+            action="POST_INVOICE",
+            entity_type="Invoice",
+            entity_id=str(db_invoice.id),
+            previous_state=prev_state,
+            new_state=db_invoice.model_dump(),
+        )
+        await self.session.commit()
+
         return db_invoice
 
-    async def mark_paid(self, invoice_id: int) -> Optional[Invoice]:
-        db_invoice = await self.get_invoice_by_id(invoice_id)
+    async def mark_paid(
+        self, org_id: uuid.UUID, invoice_id: int, user_id: int
+    ) -> Optional[Invoice]:
+        db_invoice = await self.get_invoice_by_id(org_id, invoice_id)
         if not db_invoice:
             return None
 
@@ -254,9 +360,23 @@ class InvoiceService:
                 f"Cannot mark invoice as paid from status {db_invoice.status}. Only POSTED invoices can be paid."
             )
 
+        prev_state = db_invoice.model_dump()
         db_invoice.status = InvoiceStatus.PAID
         self.session.add(db_invoice)
         await self.session.commit()
+
+        await log_audit_event(
+            session=self.session,
+            org_id=org_id,
+            user_id=user_id,
+            action="PAY_INVOICE",
+            entity_type="Invoice",
+            entity_id=str(db_invoice.id),
+            previous_state=prev_state,
+            new_state=db_invoice.model_dump(),
+        )
+        await self.session.commit()
+
         return db_invoice
 
 

@@ -15,6 +15,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: str | None = None
+    org_name: str
 
 
 class UserRead(BaseModel):
