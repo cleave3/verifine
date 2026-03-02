@@ -14,6 +14,7 @@ export default function Settings() {
     const [isConfirmLockedOpen, setIsConfirmLockedOpen] = useState(false);
     const [isConfirmCurrencyOpen, setIsConfirmCurrencyOpen] = useState(false);
     const [isConfirmRatesOpen, setIsConfirmRatesOpen] = useState(false);
+    const [isConfirmOrgOpen, setIsConfirmOrgOpen] = useState(false);
 
     const { data: settingsRes, isLoading } = useQuery({
         queryKey: ["settings"],
@@ -203,7 +204,7 @@ export default function Settings() {
                 <RoleGuard allowedRoles={['admin']}>
                     <div className="flex justify-end">
                         <button
-                            onClick={() => updateOrgMutation.mutate(orgProfile)}
+                            onClick={() => setIsConfirmOrgOpen(true)}
                             disabled={updateOrgMutation.isPending}
                             className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition disabled:bg-slate-400"
                         >
@@ -300,6 +301,19 @@ export default function Settings() {
                     </div>
                 </RoleGuard>
             </div>
+
+            <ConfirmDialog
+                isOpen={isConfirmOrgOpen}
+                title="Update Company Profile"
+                message="Are you sure you want to update the company organization details? This information is used on official documents like Invoices."
+                confirmText="Yes, Update Profile"
+                type="primary"
+                onConfirm={() => {
+                    updateOrgMutation.mutate(orgProfile);
+                    setIsConfirmOrgOpen(false);
+                }}
+                onCancel={() => setIsConfirmOrgOpen(false)}
+            />
 
             <ConfirmDialog
                 isOpen={isConfirmLockedOpen}

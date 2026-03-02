@@ -13,6 +13,14 @@ const periodSchema = z.object({
     name: z.string().min(3),
     start_date: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date" }),
     end_date: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date" }),
+}).superRefine((data, ctx) => {
+    if (new Date(data.start_date) >= new Date(data.end_date)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Start date must be before end date",
+            path: ["end_date"]
+        });
+    }
 });
 type PeriodFormValues = z.infer<typeof periodSchema>;
 
@@ -42,7 +50,7 @@ export default function FiscalPeriods() {
             form.reset();
         },
         onError: (err: any) => {
-            toast.error(err.response?.data?.detail || "Failed to open fiscal period");
+            toast.error(err.response?.data?.message || "Failed to open fiscal period");
         }
     });
 
@@ -54,7 +62,7 @@ export default function FiscalPeriods() {
             setConfirmAction(null);
         },
         onError: (err: any) => {
-            toast.error(err.response?.data?.detail || "Failed to close fiscal period");
+            toast.error(err.response?.data?.message || "Failed to close fiscal period");
         }
     });
 
@@ -66,7 +74,7 @@ export default function FiscalPeriods() {
             setConfirmAction(null);
         },
         onError: (err: any) => {
-            toast.error(err.response?.data?.detail || "Failed to lock fiscal period");
+            toast.error(err.response?.data?.message || "Failed to lock fiscal period");
         }
     });
 
@@ -148,14 +156,17 @@ export default function FiscalPeriods() {
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Name</label>
                                 <input {...form.register("name")} placeholder="e.g. March 2026" className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
+                                {form.formState.errors.name && <p className="text-rose-500 text-xs mt-1">{form.formState.errors.name.message}</p>}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Start Date</label>
                                 <input type="date" {...form.register("start_date")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
+                                {form.formState.errors.start_date && <p className="text-rose-500 text-xs mt-1">{form.formState.errors.start_date.message}</p>}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">End Date</label>
                                 <input type="date" {...form.register("end_date")} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2" />
+                                {form.formState.errors.end_date && <p className="text-rose-500 text-xs mt-1">{form.formState.errors.end_date.message}</p>}
                             </div>
                             <div className="flex justify-end gap-3 mt-6">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Cancel</button>

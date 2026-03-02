@@ -7,6 +7,7 @@ from sqlmodel import select, and_
 from src.core.database import get_session
 from src.models.fiscal_period import FiscalPeriod, PeriodStatus
 from src.modules.fiscal_period.fiscal_period_schema import FiscalPeriodCreate
+from src.core.errors import BadRequest
 
 
 class FiscalPeriodService:
@@ -43,6 +44,27 @@ class FiscalPeriodService:
     async def create_period(
         self, org_id: uuid.UUID, period_in: FiscalPeriodCreate
     ) -> FiscalPeriod:
+        # 1. Basic range check
+        if period_in.start_date >= period_in.end_date:
+            raise BadRequest("Start date must be before end date.")
+
+        # 2. Check for overlapping periods for this organization
+        # Overlap condition: (StartA <= EndB) and (EndA >= StartB)
+        overlap_stmt = select(FiscalPeriod).where(
+            and_(
+                FiscalPeriod.org_id == org_id,
+                FiscalPeriod.start_date <= period_in.end_date,
+                FiscalPeriod.end_date >= period_in.start_date,
+            )
+        )
+        existing_overlap = (await self.session.exec(overlap_stmt)).first()
+
+        if existing_overlap:
+            raise BadRequest(
+                f"Date range overlaps with existing period: {existing_overlap.name} "
+                f"({existing_overlap.start_date} to {existing_overlap.end_date})"
+            )
+
         db_period = FiscalPeriod(
             name=period_in.name,
             start_date=period_in.start_date,
