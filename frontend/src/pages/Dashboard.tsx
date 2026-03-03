@@ -2,10 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, Activity, ArrowUpRight, Wallet } from 'lucide-react';
+import { TrendingUp, TrendingDown, CreditCard, Activity, ArrowUpRight, Wallet, BarChart as BarChartIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '../lib/axios';
-import { useCurrencyStore } from '../store/currencyStore';
+import { useAuthStore } from '../store/authStore';
 
 interface ChartDataPoint {
     name: string;
@@ -22,25 +22,45 @@ interface RecentTransaction {
     type: string;
 }
 
+interface AgingPoint {
+    label: string;
+    ar: number;
+    ap: number;
+}
+
+interface DashboardRate {
+    currency_code: string;
+    rate: number;
+}
+
 interface DashboardStats {
     total_open_ar: number;
     total_open_ap: number;
     current_period_revenue: number;
     current_period_expenses: number;
     current_period_net_income: number;
+    cash_position: number;
+    period_status: string;
 }
 
 interface DashboardData {
     stats: DashboardStats;
     chart_data: ChartDataPoint[];
     recent_transactions: RecentTransaction[];
+    aging_data: AgingPoint[];
+    exchange_rates: DashboardRate[];
 }
 
 export default function Dashboard() {
-    const { baseCurrency } = useCurrencyStore();
+    const { currentOrg } = useAuthStore();
+    const primaryColor = currentOrg?.primary_color || '#4f46e5';
 
     const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(value);
+        return new Intl.NumberFormat('en-NG', {
+            style: 'currency',
+            currency: currentOrg?.base_currency_code || 'NGN',
+            minimumFractionDigits: 0
+        }).format(value);
     };
 
     const { data: dashboard, isLoading } = useQuery<DashboardData>({
@@ -69,163 +89,214 @@ export default function Dashboard() {
     const stats = dashboard?.stats || {} as DashboardStats;
     const chart_data = dashboard?.chart_data || [];
     const recent_transactions = dashboard?.recent_transactions || [];
+    const aging_data = dashboard?.aging_data || [];
+    const exchange_rates = dashboard?.exchange_rates || [];
     const isProfitable = (stats?.current_period_net_income || 0) >= 0;
 
     return (
-        <div className="mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-full">
+        <div className="mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-full space-y-8">
             {/* Header */}
-            <div className="mb-6 sm:mb-8">
-                <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Financial Overview</h1>
-                <p className="text-slate-500 dark:text-slate-400 mt-2">Real-time pulse of your organizational health and liquidity.</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Financial Overview</h1>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1">Real-time pulse of your organizational health and liquidity.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className={`px-4 py-2 rounded-full border flex items-center gap-2 font-semibold text-sm shadow-sm
+                        ${stats.period_status === 'OPEN'
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400'
+                            : 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400'
+                        }`}>
+                        <div className={`h-2 w-2 rounded-full ${stats.period_status === 'OPEN' ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
+                        Period: {stats.period_status}
+                    </div>
+                </div>
             </div>
 
             {/* Top Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
-                {/* Net Income */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden group">
-                    <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity ${isProfitable ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {isProfitable ? <TrendingUp className="h-24 w-24" /> : <TrendingDown className="h-24 w-24" />}
+                {/* Cash Position */}
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <Wallet className="h-20 w-20 text-indigo-600" />
                     </div>
                     <p className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                        <Activity className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
-                        Period Net Income
+                        <Wallet className="h-4 w-4 text-indigo-500" />
+                        Cash Position
                     </p>
-                    <p className={`mt-4 text-3xl font-bold tracking-tight ${isProfitable ? 'text-slate-900 dark:text-white' : 'text-rose-500 dark:text-rose-400'}`}>
-                        {formatCurrency(stats?.current_period_net_income || 0)}
+                    <p className="mt-4 text-3xl font-bold text-slate-900 dark:text-white font-mono">
+                        {formatCurrency(stats?.cash_position || 0)}
                     </p>
-                    <div className="mt-4 flex items-center text-xs">
-                        {isProfitable ? (
-                            <span className="text-emerald-600 dark:text-emerald-400 flex items-center font-medium bg-emerald-100 dark:bg-emerald-400/10 px-2 py-1 rounded-full">
-                                <TrendingUp className="h-3 w-3 mr-1" /> Profitable
-                            </span>
-                        ) : (
-                            <span className="text-rose-600 dark:text-rose-400 flex items-center font-medium bg-rose-100 dark:bg-rose-400/10 px-2 py-1 rounded-full">
-                                <TrendingDown className="h-3 w-3 mr-1" /> Operating Loss
-                            </span>
-                        )}
-                    </div>
+                    <p className="mt-2 text-xs text-slate-400">Total Liquid Assets (Local)</p>
                 </div>
 
-                {/* Revenue */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-xl">
+                {/* Net Income */}
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+                    <div className={`absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity ${isProfitable ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {isProfitable ? <TrendingUp className="h-20 w-20" /> : <TrendingDown className="h-20 w-20" />}
+                    </div>
                     <p className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                        <ArrowUpRight className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
-                        Period Revenue
+                        <Activity className="h-4 w-4 text-indigo-500" />
+                        Net Income
                     </p>
-                    <p className="mt-4 text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-                        {formatCurrency(stats?.current_period_revenue || 0)}
+                    <p className={`mt-4 text-3xl font-bold tracking-tight font-mono ${isProfitable ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {formatCurrency(stats?.current_period_net_income || 0)}
                     </p>
+                    <p className="mt-2 text-xs text-slate-400">Net Profit this period</p>
                 </div>
 
                 {/* Open AR */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-xl">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
                     <p className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                        <Wallet className="h-4 w-4 text-blue-500 dark:text-blue-400" />
-                        Awaiting Payment (AR)
+                        <ArrowUpRight className="h-4 w-4 text-emerald-500" />
+                        Accounts Receivable
                     </p>
-                    <p className="mt-4 text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                    <p className="mt-4 text-3xl font-bold text-slate-900 dark:text-white font-mono">
                         {formatCurrency(stats?.total_open_ar || 0)}
                     </p>
-                    <p className="mt-4 text-xs text-slate-400 dark:text-slate-500 font-medium">Invoices sent, uncollected</p>
+                    <p className="mt-2 text-xs text-slate-400">Uncollected Revenue</p>
                 </div>
 
                 {/* Open AP */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-xl">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
                     <p className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                        <CreditCard className="h-4 w-4 text-rose-500 dark:text-rose-400" />
-                        Pending Debt (AP)
+                        <CreditCard className="h-4 w-4 text-rose-500" />
+                        Accounts Payable
                     </p>
-                    <p className="mt-4 text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                    <p className="mt-4 text-3xl font-bold text-slate-900 dark:text-white font-mono">
                         {formatCurrency(stats?.total_open_ap || 0)}
                     </p>
-                    <p className="mt-4 text-xs text-slate-400 dark:text-slate-500 font-medium">Bills approved, unpaid</p>
+                    <p className="mt-2 text-xs text-slate-400">Upcoming Obligations</p>
                 </div>
 
             </div>
 
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Charts & Tables Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-                {/* Chart Section */}
-                <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 flex flex-col">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center">
-                        <BarChart className="h-5 w-5 mr-2 text-indigo-500 dark:text-indigo-400" />
-                        Trailing Performance (6 Periods)
-                    </h3>
-                    <div className="flex-1 w-full min-h-[350px]">
+                {/* AR/AP Aging Chart */}
+                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 lg:p-8">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Aging Analysis</h3>
+                            <p className="text-sm text-slate-500">Liquidity timeline: Overdue vs upcoming</p>
+                        </div>
+                        <BarChartIcon className="h-6 w-6 text-indigo-500" />
+                    </div>
+                    <div className="h-[300px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart
-                                data={chart_data}
-                                margin={{ top: 20, right: 10, left: 0, bottom: 5 }}
-                            >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" strokeOpacity={0.2} vertical={false} />
-                                <XAxis dataKey="name" stroke="#64748b" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                <YAxis
-                                    stroke="#64748b"
-                                    tick={{ fill: '#64748b', fontSize: 12 }}
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tickFormatter={(val) => `₦${val / 1000}k`}
-                                    width={45}
-                                />
+                            <BarChart data={aging_data} margin={{ left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
                                 <RechartsTooltip
-                                    cursor={{ fill: 'rgba(226, 232, 240, 0.5)' }}
-                                    contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px', color: '#0f172a' }}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: any) => formatCurrency(Number(value))}
                                 />
-                                <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                <Bar dataKey="revenue" name="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                                <Bar dataKey="expenses" name="Expenses" fill="#f43f5e" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                                <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px' }} />
+                                <Bar name="Receivables (AR)" dataKey="ar" fill={primaryColor} radius={[6, 6, 0, 0]} />
+                                <Bar name="Payables (AP)" dataKey="ap" fill="#f43f5e" radius={[6, 6, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                {/* Recent Activity */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 flex flex-col max-h-[500px]">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center justify-between">
-                        <span className="flex items-center">
-                            <Activity className="h-5 w-5 mr-2 text-fuchsia-500 dark:text-fuchsia-400" />
-                            Recent Ledger Activity
-                        </span>
-                    </h3>
-
-                    <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                        {recent_transactions.length > 0 ? (
-                            <ul className="space-y-4">
-                                {recent_transactions.map((tx) => (
-                                    <li key={tx.id} className="group flex items-start gap-4 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-600">
-                                        <div className="shrink-0 mt-1">
-                                            <div className="h-8 w-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400">
-                                                <DollarSign className="h-4 w-4" />
+                {/* Currency Table & Rates */}
+                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
+                    <div className="p-6 lg:p-8 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Currency Pulse</h3>
+                            <p className="text-sm text-slate-500">Live exchange rates (Relative to Local)</p>
+                        </div>
+                        <Activity className="h-6 w-6 text-fuchsia-500" />
+                    </div>
+                    <div className="flex-1 overflow-x-auto p-2">
+                        <table className="min-w-full">
+                            <thead>
+                                <tr className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                    <th className="px-6 py-4">Currency</th>
+                                    <th className="px-6 py-4">Exchange Rate</th>
+                                    <th className="px-6 py-4 text-right">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                {exchange_rates.map((rate) => (
+                                    <tr key={rate.currency_code} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">
+                                                    {rate.currency_code.substring(0, 2)}
+                                                </div>
+                                                <span className="font-bold text-slate-900 dark:text-white">{rate.currency_code}</span>
                                             </div>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                                                {tx.description}
-                                            </p>
-                                            <div className="flex items-center mt-1 text-xs text-slate-500 dark:text-slate-400 gap-2">
-                                                <span>{format(new Date(tx.date), 'MMM d, yyyy h:mm a')}</span>
-                                                <span>•</span>
-                                                <span className="uppercase tracking-wider font-mono text-slate-600 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded">
-                                                    JE #{tx.id}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="shrink-0 text-right">
-                                            <p className="text-sm font-bold text-slate-900 dark:text-white font-mono">
-                                                {formatCurrency(tx.amount || 0)}
-                                            </p>
-                                        </div>
-                                    </li>
+                                        </td>
+                                        <td className="px-6 py-4 font-mono text-slate-700 dark:text-slate-200">
+                                            1 {rate.currency_code} = {rate.rate.toFixed(2)} {currentOrg?.base_currency_code}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                                                Active
+                                            </span>
+                                        </td>
+                                    </tr>
                                 ))}
-                            </ul>
-                        ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
-                                <p>No recent ledger activity detected.</p>
+                                {exchange_rates.length === 0 && (
+                                    <tr>
+                                        <td colSpan={3} className="px-6 py-12 text-center text-slate-400">
+                                            No foreign currencies configured.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            {/* Trailing Performance & Recent Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-10">
+
+                {/* Performance Chart */}
+                <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 lg:p-8">
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-8">Trailing Performance (6 Periods)</h3>
+                    <div className="h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chart_data}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                                <RechartsTooltip
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                    formatter={(value: any) => formatCurrency(Number(value))}
+                                />
+                                <Bar name="Revenue" dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                                <Bar name="Expenses" dataKey="expenses" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={40} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Recent Activity Feed */}
+                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 flex flex-col">
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Recent Ledger</h3>
+                    <div className="space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                        {recent_transactions.map((tx) => (
+                            <div key={tx.id} className="flex items-start gap-4">
+                                <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center shrink-0">
+                                    <Activity className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{tx.description}</p>
+                                    <p className="text-xs text-slate-500">{format(new Date(tx.date), 'MMM d, h:mm a')}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-bold font-mono text-slate-900 dark:text-white">{formatCurrency(tx.amount)}</p>
+                                    <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">JE #{tx.id}</p>
+                                </div>
                             </div>
-                        )}
+                        ))}
                     </div>
                 </div>
 

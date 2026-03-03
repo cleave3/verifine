@@ -1,4 +1,5 @@
 from sqlmodel import SQLModel, Field
+import sqlalchemy as sa
 from pydantic import EmailStr
 from typing import Optional
 import uuid
@@ -18,7 +19,10 @@ class User(SQLModel, table=True):
     email: EmailStr = Field(unique=True, index=True)
     hashed_password: str
     full_name: str | None = None
-    role: UserRole = Field(default=UserRole.VIEWER)
+    role: UserRole = Field(
+        default=UserRole.VIEWER,
+        sa_type=sa.Enum(UserRole, native_enum=False),
+    )
     is_active: bool = True
     is_superuser: bool = False
     org_id: uuid.UUID = Field(foreign_key="organization.id")

@@ -18,15 +18,30 @@ class RecentTransaction(BaseModel):
     type: str  # 'JE', 'INVOICE', 'BILL'
 
 
+class AgingPoint(BaseModel):
+    label: str  # "Overdue" or "Upcoming"
+    ar: float
+    ap: float
+
+
 class DashboardStats(BaseModel):
     total_open_ar: float
     total_open_ap: float
     current_period_revenue: float
     current_period_expenses: float
     current_period_net_income: float
+    cash_position: float
+    period_status: str
+
+
+class DashboardRate(BaseModel):
+    currency_code: str
+    rate: float
 
 
 class DashboardResponse(BaseModel):
     stats: DashboardStats
     chart_data: List[ChartDataPoint]
     recent_transactions: List[RecentTransaction]
+    aging_data: List[AgingPoint]
+    exchange_rates: List[DashboardRate]

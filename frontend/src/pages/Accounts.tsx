@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import api from "../lib/axios";
+import { RoleGuard } from "../components/RoleGuard";
 
 const accountSchema = z.object({
     code: z.string().min(3).max(10),
@@ -56,12 +57,14 @@ export default function Accounts() {
         <div className="p-6">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Chart of Accounts</h1>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition"
-                >
-                    + New Account
-                </button>
+                <RoleGuard allowedRoles={['admin', 'controller', 'accountant']}>
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition"
+                    >
+                        + New Account
+                    </button>
+                </RoleGuard>
             </div>
 
             {isLoading ? (
