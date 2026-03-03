@@ -15,7 +15,7 @@ class AuditService:
         self,
         org_id: uuid.UUID,
         page: int = 1,
-        page_size: int = 50,
+        page_size: int = 10,
         user_id: Optional[int] = None,
         action: Optional[str] = None,
     ):

@@ -20,7 +20,7 @@ export default function AuditLog() {
         queryFn: async () => (await api.get("/audit", {
             params: {
                 page,
-                page_size: 15,
+                page_size: 10,
                 action: actionFilter || undefined,
                 user_id: userFilter || undefined
             }
@@ -88,6 +88,12 @@ export default function AuditLog() {
                                 <option value="CREATE_ACCOUNT">Create Account</option>
                                 <option value="UPDATE_ACCOUNT">Update Account</option>
                                 <option value="POST_JOURNAL_ENTRY">Post Journal Entry</option>
+                            </optgroup>
+                            <optgroup label="Users">
+                                <option value="INVITE_USER">Invite User</option>
+                                <option value="UPDATE_USER_ROLE">Update User Role</option>
+                                <option value="DEACTIVATE_USER">Deactivate User</option>
+                                <option value="REACTIVATE_USER">Reactivate User</option>
                             </optgroup>
                         </select>
                     </div>

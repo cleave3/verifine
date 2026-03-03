@@ -48,7 +48,7 @@ async def invite_user(
     current_user: User = Depends(role_required([UserRole.ADMIN])),
     users_service: UsersService = Depends(get_users_service),
 ):
-    new_user = await users_service.invite_user(org_id, invite_req)
+    new_user = await users_service.invite_user(org_id, current_user.id, invite_req)
     return response(
         201,
         "User invited successfully",
@@ -64,7 +64,9 @@ async def update_role(
     current_user: User = Depends(role_required([UserRole.ADMIN])),
     users_service: UsersService = Depends(get_users_service),
 ):
-    updated = await users_service.update_user_role(org_id, user_id, role_update)
+    updated = await users_service.update_user_role(
+        org_id, user_id, current_user.id, role_update
+    )
     return response(200, "User role updated", {"id": updated.id, "role": updated.role})
 
 
@@ -75,10 +77,25 @@ async def deactivate_user(
     current_user: User = Depends(role_required([UserRole.ADMIN])),
     users_service: UsersService = Depends(get_users_service),
 ):
-    updated = await users_service.deactivate_user(org_id, user_id)
+    updated = await users_service.deactivate_user(org_id, current_user.id, user_id)
     return response(
         200,
         "User access deactivated",
+        {"id": updated.id, "is_active": updated.is_active},
+    )
+
+
+@router.patch("/{user_id}/reactivate", response_model=dict)
+async def reactivate_user(
+    user_id: int,
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(role_required([UserRole.ADMIN])),
+    users_service: UsersService = Depends(get_users_service),
+):
+    updated = await users_service.reactivate_user(org_id, current_user.id, user_id)
+    return response(
+        200,
+        "User access reactivated",
         {"id": updated.id, "is_active": updated.is_active},
     )
 

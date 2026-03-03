@@ -26,7 +26,7 @@ def get_audit_service(session: AsyncSession = Depends(get_session)) -> AuditServ
 )
 async def list_audit_logs(
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 10,
     user_id: Optional[int] = None,
     action: Optional[str] = None,
     audit_service: AuditService = Depends(get_audit_service),

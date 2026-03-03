@@ -8,6 +8,7 @@ from sqlmodel import select, and_
 from src.core.database import get_session
 from src.core.security import get_password_hash, verify_password
 from src.core.errors import BadRequest
+from src.core.audit import log_audit_event
 from src.models.user import User, UserRole
 from src.modules.users.users_schema import (
     UserInviteRequest,
@@ -29,7 +30,7 @@ class UsersService:
         return results.all()
 
     async def invite_user(
-        self, org_id: uuid.UUID, invite_data: UserInviteRequest
+        self, org_id: uuid.UUID, current_user_id: int, invite_data: UserInviteRequest
     ) -> User:
         # Check if email is available
         stmt = select(User).where(User.email == invite_data.email)
@@ -52,6 +53,23 @@ class UsersService:
         )
 
         self.session.add(new_user)
+        # We need the ID for the audit log, so flush but don't commit yet
+        await self.session.flush()
+
+        await log_audit_event(
+            self.session,
+            org_id=org_id,
+            user_id=current_user_id,  # New user ID
+            action="INVITE_USER",
+            entity_type="User",
+            entity_id=str(new_user.id),
+            new_state={
+                "email": new_user.email,
+                "role": new_user.role,
+                "full_name": new_user.full_name,
+            },
+        )
+
         await self.session.commit()
         await self.session.refresh(new_user)
 
@@ -62,27 +80,97 @@ class UsersService:
         return new_user
 
     async def update_user_role(
-        self, org_id: uuid.UUID, target_user_id: int, role_data: UserRoleUpdate
+        self,
+        org_id: uuid.UUID,
+        target_user_id: int,
+        current_user_id: int,
+        role_data: UserRoleUpdate,
     ) -> User:
         user = await self.session.get(User, target_user_id)
         if not user or user.org_id != org_id:
             raise BadRequest("User not found in your organization")
 
         # Prevent an admin from demoting themselves if they are the last admin, but that's a nice-to-have.
+        previous_role = {"role": user.role, "full_name": user.full_name}
         user.role = role_data.role
         self.session.add(user)
+
+        await log_audit_event(
+            self.session,
+            org_id=org_id,
+            user_id=current_user_id,
+            action="UPDATE_USER_ROLE",
+            entity_type="User",
+            entity_id=str(target_user_id),
+            previous_state=previous_role,
+            new_state={"role": user.role, "full_name": user.full_name},
+        )
+
         await self.session.commit()
         await self.session.refresh(user)
 
         return user
 
-    async def deactivate_user(self, org_id: uuid.UUID, target_user_id: int) -> User:
+    async def deactivate_user(
+        self, org_id: uuid.UUID, current_user_id: int, target_user_id: int
+    ) -> User:
         user = await self.session.get(User, target_user_id)
         if not user or user.org_id != org_id:
             raise BadRequest("User not found in your organization")
 
+        previous_state = {
+            "full_name": user.full_name,
+            "is_active": user.is_active,
+        }
         user.is_active = False
         self.session.add(user)
+
+        await log_audit_event(
+            self.session,
+            org_id=org_id,
+            user_id=current_user_id,
+            action="DEACTIVATE_USER",
+            entity_type="User",
+            entity_id=str(target_user_id),
+            previous_state=previous_state,
+            new_state={
+                "full_name": user.full_name,
+                "is_active": user.is_active,
+            },
+        )
+
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
+
+    async def reactivate_user(
+        self, org_id: uuid.UUID, current_user_id: int, target_user_id: int
+    ) -> User:
+        user = await self.session.get(User, target_user_id)
+        if not user or user.org_id != org_id:
+            raise BadRequest("User not found in your organization")
+
+        previous_state = {
+            "full_name": user.full_name,
+            "is_active": user.is_active,
+        }
+        user.is_active = True
+        self.session.add(user)
+
+        await log_audit_event(
+            self.session,
+            org_id=org_id,
+            user_id=current_user_id,
+            action="REACTIVATE_USER",
+            entity_type="User",
+            entity_id=str(target_user_id),
+            previous_state=previous_state,
+            new_state={
+                "full_name": user.full_name,
+                "is_active": user.is_active,
+            },
+        )
+
         await self.session.commit()
         await self.session.refresh(user)
         return user
@@ -97,10 +185,23 @@ class UsersService:
         if not user:
             raise BadRequest("User not found")
 
+        previous_name = user.full_name
         if profile_data.full_name is not None:
             user.full_name = profile_data.full_name
 
         self.session.add(user)
+
+        await log_audit_event(
+            self.session,
+            org_id=user.org_id,
+            user_id=user_id,
+            action="UPDATE_USER_PROFILE",
+            entity_type="User",
+            entity_id=str(user_id),
+            previous_state={"full_name": previous_name},
+            new_state={"full_name": user.full_name},
+        )
+
         await self.session.commit()
         await self.session.refresh(user)
         return user

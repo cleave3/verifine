@@ -104,8 +104,6 @@ async def get_exchange_rates(
     # We will initialize with some standard defaults if nothing is in the DB.
     db_rates = await service.get_exchange_rates(org_id)
 
-    print("db_rates ===> ", db_rates)
-
     active_rates = {}
     if not db_rates:
         # Provide defaults if not initialized to avoid empty UI

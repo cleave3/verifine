@@ -4,6 +4,7 @@ import api from '../lib/axios';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { Users as UsersIcon, UserPlus, Shield, RefreshCw } from 'lucide-react';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface User {
     id: number;
@@ -19,6 +20,8 @@ export default function Users() {
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    const [deactivatingUserId, setDeactivatingUserId] = useState<number | null>(null);
+    const [reactivatingUserId, setReactivatingUserId] = useState<number | null>(null);
 
     const { data: users, isLoading } = useQuery({
         queryKey: ['users', currentOrg?.id],
@@ -64,6 +67,18 @@ export default function Users() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] });
             toast.success('User deactivated');
+            setDeactivatingUserId(null);
+        },
+    });
+
+    const reactivateMutation = useMutation({
+        mutationFn: async (userId: number) => {
+            await api.patch(`/users/${userId}/reactivate`);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            toast.success('User reactivated');
+            setReactivatingUserId(null);
         },
     });
 
@@ -164,10 +179,15 @@ export default function Users() {
                                                         <button onClick={() => openRoleModal(u)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">
                                                             Change Role
                                                         </button>
-                                                        <button onClick={() => {
-                                                            if (confirm('Are you sure you want to deactivate this user?')) deactMutation.mutate(u.id);
-                                                        }} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 ml-4">
+                                                        <button onClick={() => setDeactivatingUserId(u.id)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 ml-4">
                                                             Deactivate
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {u.id !== currentUser?.id && !u.is_active && (
+                                                    <div className="flex gap-2 justify-end">
+                                                        <button onClick={() => setReactivatingUserId(u.id)} className="text-emerald-600 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300">
+                                                            Reactivate
                                                         </button>
                                                     </div>
                                                 )}
@@ -248,6 +268,26 @@ export default function Users() {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                isOpen={deactivatingUserId !== null}
+                title="Deactivate User"
+                message="Are you sure you want to deactivate this member? They will no longer be able to log in or access organization data."
+                confirmText="Yes, Deactivate"
+                type="danger"
+                onConfirm={() => deactivatingUserId && deactMutation.mutate(deactivatingUserId)}
+                onCancel={() => setDeactivatingUserId(null)}
+            />
+
+            <ConfirmDialog
+                isOpen={reactivatingUserId !== null}
+                title="Reactivate User"
+                message="Are you sure you want to reactivate this member? They will regain access to log in and organization data."
+                confirmText="Yes, Reactivate"
+                type="success"
+                onConfirm={() => reactivatingUserId && reactivateMutation.mutate(reactivatingUserId)}
+                onCancel={() => setReactivatingUserId(null)}
+            />
 
         </div>
     );
