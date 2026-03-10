@@ -4,6 +4,8 @@ import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Su
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RoleGuard } from "./RoleGuard";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { useConfirmStore } from "../store/confirmStore";
 
 interface SidebarSectionProps {
     title: string;
@@ -94,6 +96,7 @@ export default function Layout() {
         }`;
 
 
+    const { isOpen, options, onConfirm, onCancel } = useConfirmStore();
 
     return (
         <div className="flex h-screen bg-gray-50 dark:bg-slate-900 font-sans transition-colors overflow-hidden">
@@ -300,6 +303,13 @@ export default function Layout() {
                     <span className="text-[10px] font-medium leading-none">Menu</span>
                 </button>
             </nav>
+
+            <ConfirmDialog 
+                isOpen={isOpen}
+                {...options}
+                onConfirm={onConfirm}
+                onCancel={onCancel}
+            />
         </div>
     );
 }

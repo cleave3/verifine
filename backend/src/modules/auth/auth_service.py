@@ -11,6 +11,10 @@ import uuid
 from datetime import date
 from src.modules.auth.auth_schema import UserCreate
 from src.core.security import get_password_hash
+import pyotp
+import qrcode
+import io
+import base64
 from datetime import timedelta
 
 
@@ -111,6 +115,58 @@ class AuthService:
         await self.session.commit()
         await self.session.refresh(db_user)
         return db_user
+
+    async def generate_mfa_setup(self, user: User):
+        if not user.mfa_secret:
+            user.mfa_secret = pyotp.random_base32()
+            self.session.add(user)
+            await self.session.commit()
+
+        totp = pyotp.TOTP(user.mfa_secret)
+        provisioning_uri = totp.provisioning_uri(
+            name=user.email, issuer_name="Verifine"
+        )
+
+        # Generate QR Code
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(provisioning_uri)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        qr_code_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+        return {
+            "secret": user.mfa_secret,
+            "qr_code": f"data:image/png;base64,{qr_code_base64}",
+            "provisioning_uri": provisioning_uri,
+        }
+
+    async def verify_and_enable_mfa(self, user: User, code: str) -> bool:
+        if not user.mfa_secret:
+            return False
+
+        totp = pyotp.TOTP(user.mfa_secret)
+        if totp.verify(code):
+            user.mfa_enabled = True
+            self.session.add(user)
+            await self.session.commit()
+            return True
+        return False
+
+    async def verify_mfa_login(self, user: User, code: str) -> bool:
+        if not user.mfa_enabled or not user.mfa_secret:
+            return False
+
+        totp = pyotp.TOTP(user.mfa_secret)
+        return totp.verify(code)
+
+    async def disable_mfa(self, user: User):
+        user.mfa_enabled = False
+        user.mfa_secret = None
+        self.session.add(user)
+        await self.session.commit()
 
 
 def get_auth_service(session: AsyncSession = Depends(get_session)) -> AuthService:

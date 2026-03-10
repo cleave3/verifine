@@ -25,4 +25,8 @@ class User(SQLModel, table=True):
     )
     is_active: bool = True
     is_superuser: bool = False
+    mfa_enabled: bool = Field(
+        sa_column=sa.Column(sa.Boolean(), nullable=False, server_default="false")
+    )
+    mfa_secret: Optional[str] = Field(sa_column=sa.Column(sa.String(), nullable=True))
     org_id: uuid.UUID = Field(foreign_key="organization.id")

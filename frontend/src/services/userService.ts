@@ -33,7 +33,7 @@ export const userService = {
         return response.data;
     },
 
-    updateProfile: async (payload: { first_name?: string; last_name?: string }) => {
+    updateProfile: async (payload: { full_name: string }) => {
         const response = await api.patch("/users/profile", payload);
         return response.data;
     },
@@ -41,5 +41,10 @@ export const userService = {
     changePassword: async (payload: any) => {
         const response = await api.patch("/users/password", payload);
         return response.data;
+    },
+
+    getProfile: async () => {
+        const response = await api.get("/users/profile");
+        return response.data.data;
     }
 };

@@ -10,6 +10,7 @@ import { fiscalPeriodService } from "../services/fiscalPeriodService";
 import { RoleGuard } from "../components/RoleGuard";
 import { Building, Plus, Trash2, ArrowDownRight } from "lucide-react";
 import { useCurrencyStore } from "../store/currencyStore";
+import { useConfirmStore } from "../store/confirmStore";
 
 const assetSchema = z.object({
     asset_name: z.string().min(1, "Asset name is required"),
@@ -116,11 +117,20 @@ export default function FixedAssets() {
         },
     });
 
+    const { confirm } = useConfirmStore();
+
     const onSubmitAsset = (data: any) => createAssetMutation.mutate(data);
     const onSubmitDepreciation = (data: any) => runDepreciationMutation.mutate(data);
 
-    const handleDispose = (assetId: number) => {
-        if (window.confirm("Are you sure you want to dispose of this asset? This will calculate final depreciation and remove it from the active register.")) {
+    const handleDispose = async (assetId: number) => {
+        const confirmed = await confirm({
+            title: "Dispose Asset",
+            message: "Are you sure you want to dispose of this asset? This will calculate final depreciation and remove it from the active register.",
+            confirmText: "Yes, Dispose Asset",
+            type: "danger"
+        });
+
+        if (confirmed) {
             disposeAssetMutation.mutate(assetId);
         }
     };

@@ -4,13 +4,18 @@ import { useNavigate } from "react-router-dom";
 import { Carousel } from "../components/Carousel";
 import { Mail, Lock, CheckCircle2, ShieldCheck, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { PasswordInput } from "../components/ui/PasswordInput";
 
 export default function Login() {
     const [email, setEmail] = useState("admin@verifine.com");
     const [password, setPassword] = useState("verifineadmin2026");
+    const [mfaCode, setMfaCode] = useState("");
+    const [mfaRequired, setMfaRequired] = useState(false);
+    const [mfaToken, setMfaToken] = useState("");
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const login = useAuthStore(state => state.login);
+    const mfaLogin = useAuthStore(state => state.mfaLogin);
     const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -18,10 +23,20 @@ export default function Login() {
         setError("");
         setIsLoading(true);
         try {
-            await login({ email, password });
-            navigate("/");
+            if (mfaRequired) {
+                await mfaLogin({ email, code: mfaCode, mfa_token: mfaToken });
+                navigate("/");
+            } else {
+                const res = await login({ email, password });
+                if (res && res.mfa_required) {
+                    setMfaRequired(true);
+                    setMfaToken(res.mfa_token);
+                } else {
+                    navigate("/");
+                }
+            }
         } catch (err: any) {
-            setError(err.response?.data?.message || "Invalid credentials. Please try again.");
+            setError(err.response?.data?.message || "Invalid credentials or MFA code. Please try again.");
         } finally {
             setIsLoading(false);
         }
@@ -48,10 +63,10 @@ export default function Login() {
                             </span>
                         </div>
                         <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-2 leading-tight">
-                            Welcome back
+                            {mfaRequired ? "Two-Factor Auth" : "Welcome back"}
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400">
-                            The intelligent workspace for modern accountants.
+                            {mfaRequired ? "Enter the 6-digit code from your authenticator app." : "The intelligent workspace for modern accountants."}
                         </p>
                     </motion.div>
 
@@ -74,61 +89,75 @@ export default function Login() {
                             </motion.div>
                         )}
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                                    Email
-                                </label>
-                                <div className="relative group">
-                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
-                                        <Mail className="w-5 h-5" />
-                                    </div>
-                                    <input
-                                        type="email"
-                                        required
-                                        placeholder="name@company.com"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        className="block w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600 font-medium"
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                                        Password
+                        {!mfaRequired ? (
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                                        Email
                                     </label>
-                                    <button type="button" className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition">
-                                        Forgot Password?
-                                    </button>
-                                </div>
-                                <div className="relative group">
-                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
-                                        <Lock className="w-5 h-5" />
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+                                            <Mail className="w-5 h-5" />
+                                        </div>
+                                        <input
+                                            type="email"
+                                            required
+                                            placeholder="name@company.com"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            className="block w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600 font-medium"
+                                        />
                                     </div>
-                                    <input
-                                        type="password"
-                                        required
-                                        placeholder="••••••••"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="block w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600 font-medium"
-                                    />
                                 </div>
-                            </div>
-                        </div>
 
-                        {/* <div className="flex items-center">
-                            <input
-                                id="remember-me"
-                                type="checkbox"
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 rounded cursor-pointer"
-                            />
-                            <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
-                                Keep me logged in for 30 days
-                            </label>
-                        </div> */}
+                                <PasswordInput
+                                    label={
+                                        <div className="flex items-center justify-between w-full">
+                                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                                Password
+                                            </label>
+                                            <button type="button" className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition">
+                                                Forgot Password?
+                                            </button>
+                                        </div>
+                                    }
+                                    required
+                                    placeholder="••••••••"
+                                    value={password}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                                    icon={<Lock className="w-5 h-5" />}
+                                />
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                                        Verification Code
+                                    </label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+                                            <Lock className="w-5 h-5" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            required
+                                            maxLength={6}
+                                            placeholder="000000"
+                                            value={mfaCode}
+                                            onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                                            className="block w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600 font-medium text-center tracking-[1em] text-lg"
+                                        />
+                                    </div>
+                                </div>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setMfaRequired(false)}
+                                    className="text-xs font-bold text-slate-500 hover:text-indigo-600 transition flex items-center"
+                                >
+                                    ← Back to regular login
+                                </button>
+                            </div>
+                        )}
 
                         <div>
                             <button
@@ -140,7 +169,7 @@ export default function Login() {
                                     <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                                 ) : (
                                     <>
-                                        Authorize Access
+                                        {mfaRequired ? "Verify & Sign In" : "Authorize Access"}
                                         <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                                     </>
                                 )}
@@ -188,11 +217,6 @@ export default function Login() {
                     <p className="text-slate-500 text-sm font-medium">
                         &copy; 2026 Verifine Technologies. All rights reserved.
                     </p>
-                    {/* <div className="flex space-x-6 text-slate-500 text-sm font-bold">
-                        <a href="#" className="hover:text-white transition">Privacy</a>
-                        <a href="#" className="hover:text-white transition">Terms</a>
-                        <a href="#" className="hover:text-white transition">Support</a>
-                    </div> */}
                 </div>
             </div>
         </div>

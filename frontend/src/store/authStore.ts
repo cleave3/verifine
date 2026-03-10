@@ -18,13 +18,15 @@ interface User {
     full_name: string | null;
     role: string;
     org_id: string;
+    mfa_enabled: boolean;
 }
 
 interface AuthState {
     user: User | null;
     currentOrg: Organization | null;
     isLoading: boolean;
-    login: (data: any) => Promise<void>;
+    login: (data: any) => Promise<any>;
+    mfaLogin: (data: { email: string; code: string; mfa_token: string }) => Promise<void>;
     logout: () => Promise<void>;
     checkAuth: () => Promise<void>;
     refreshOrg: () => Promise<void>;
@@ -36,6 +38,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     isLoading: true,
     login: async (credentials) => {
         const res = await api.post("/auth/login", credentials);
+        if (res.data.data.mfa_required) {
+            return res.data.data; // Return mfa_token and mfa_required flag
+        }
+        const user = res.data.data;
+        const orgRes = await api.get("/organizations/me");
+        set({ user, currentOrg: orgRes.data.data });
+    },
+    mfaLogin: async (data: { email: string; code: string; mfa_token: string }) => {
+        const res = await api.post("/auth/mfa/login", data);
         const user = res.data.data;
         const orgRes = await api.get("/organizations/me");
         set({ user, currentOrg: orgRes.data.data });
