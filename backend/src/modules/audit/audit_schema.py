@@ -4,6 +4,12 @@ from pydantic import BaseModel
 from datetime import datetime
 
 
+class AuditActionTypeRead(BaseModel):
+    name: str
+    label: str
+    group: str
+
+
 class AuditUser(BaseModel):
     id: int
     email: str

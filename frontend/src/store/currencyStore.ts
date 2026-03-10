@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import axios from '../lib/axios';
+import { formatNaira } from '../lib/utils';
 
 interface CurrencyState {
     baseCurrency: string;
     activeRates: Record<string, number>;
     fetchSettingsAndRates: () => Promise<void>;
     convertAmount: (amount: number, fromCurrency: string) => number;
+    formatCurrency: (amount: number, currency?: string) => string;
 }
 
 export const useCurrencyStore = create<CurrencyState>((set, get) => ({
@@ -45,5 +47,13 @@ export const useCurrencyStore = create<CurrencyState>((set, get) => ({
         // Multiply by the active rate map
         const rate = state.activeRates[fromCurrency] || 1.0;
         return amount * rate;
+    },
+    formatCurrency: (amount: number, currency?: string) => {
+        const state = get();
+        const currencyCode = currency || state.baseCurrency;
+        if (currencyCode === 'NGN') {
+            return formatNaira(amount);
+        }
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode, maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(amount);
     }
 }));

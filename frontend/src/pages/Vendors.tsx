@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import api from "../lib/axios";
+import { vendorService } from "../services/vendorService";
 import { RoleGuard } from "../components/RoleGuard";
 
 const vendorSchema = z.object({
@@ -14,7 +14,6 @@ const vendorSchema = z.object({
     phone: z.string().optional(),
     payment_terms_days: z.coerce.number().min(0),
 });
-type VendorFormValues = z.infer<typeof vendorSchema>;
 
 export default function Vendors() {
     const queryClient = useQueryClient();
@@ -22,18 +21,13 @@ export default function Vendors() {
 
     const { data: vendorsResponse, isLoading } = useQuery({
         queryKey: ["vendors"],
-        queryFn: async () => {
-            const { data } = await api.get("/ap/vendors/");
-            return data;
-        },
+        queryFn: vendorService.getVendors,
     });
 
     const vendors = vendorsResponse?.data || [];
 
     const createMutation = useMutation({
-        mutationFn: async (newVendor: VendorFormValues) => {
-            return await api.post("/ap/vendors/", newVendor);
-        },
+        mutationFn: vendorService.createVendor,
         onSuccess: () => {
             toast.success("Vendor added successfully");
             queryClient.invalidateQueries({ queryKey: ["vendors"] });

@@ -91,8 +91,12 @@ class FiscalPeriodService:
         return db_period
 
     async def close_period(
-        self, org_id: uuid.UUID, period_id: int
+        self, org_id: uuid.UUID, period_id: int, retained_earnings_account_id: int
     ) -> Optional[FiscalPeriod]:
+        from src.models.account import Account, AccountType
+        from src.models.journal_entry import JournalEntry, LedgerLine, JournalStatus
+        from sqlmodel import func
+
         db_period = await self.get_period_by_id(org_id, period_id)
         if not db_period:
             return None
@@ -100,9 +104,111 @@ class FiscalPeriodService:
         if db_period.status == PeriodStatus.CLOSED:
             return db_period
 
-        # Here we could implement retaining earnings transfer logic or
-        # Trial Balance balanced checks before closing.
-        # For simplicity in this demo, we simply mark it closed.
+        # 1. Verify retained earnings account exists and is Equity
+        re_acct = await self.session.get(Account, retained_earnings_account_id)
+        if (
+            not re_acct
+            or re_acct.org_id != org_id
+            or re_acct.type != AccountType.EQUITY
+        ):
+            raise BadRequest(
+                "Invalid Retained Earnings account. It must be an Equity account belonging to your organization."
+            )
+
+        # 2. Find all balances for REVENUE and EXPENSE accounts in this period.
+        stmt = (
+            select(
+                LedgerLine.account_id,
+                func.sum(LedgerLine.base_debit).label("total_debit"),
+                func.sum(LedgerLine.base_credit).label("total_credit"),
+                Account.type,
+            )
+            .join(JournalEntry)
+            .join(Account)
+            .where(
+                JournalEntry.org_id == org_id,
+                JournalEntry.period_id == period_id,
+                JournalEntry.status == JournalStatus.POSTED,
+                Account.type.in_([AccountType.REVENUE, AccountType.EXPENSE]),
+            )
+            .group_by(LedgerLine.account_id, Account.type)
+        )
+        balances = (await self.session.exec(stmt)).all()
+
+        if balances:
+            # We need to create a closing Journal Entry
+            closing_je = JournalEntry(
+                org_id=org_id,
+                period_id=period_id,
+                entry_date=db_period.end_date,
+                description=f"Year-End Closing for {db_period.name}",
+                status=JournalStatus.POSTED,
+                created_by="SYSTEM",
+            )
+            self.session.add(closing_je)
+            await self.session.flush()
+
+            retained_earnings_amount = 0.0
+
+            for acc_id, t_debit, t_credit, a_type in balances:
+                balance = float(t_debit or 0.0) - float(t_credit or 0.0)
+                if abs(balance) < 0.01:
+                    continue
+
+                line_debit = 0.0
+                line_credit = 0.0
+
+                if balance > 0:
+                    # Debit balance, need to credit to zero out
+                    line_credit = balance
+                    retained_earnings_amount -= (
+                        balance  # We credit the account, so we debit RE to balance
+                    )
+                else:
+                    # Credit balance, need to debit to zero out
+                    line_debit = abs(balance)
+                    retained_earnings_amount += abs(
+                        balance
+                    )  # We debit the account, so we credit RE to balance
+
+                self.session.add(
+                    LedgerLine(
+                        journal_entry_id=closing_je.id,
+                        account_id=acc_id,
+                        description="Closing Entry to zero account",
+                        currency_code="NGN",  # Or whatever base currency is
+                        exchange_rate=1.0,
+                        transaction_debit=line_debit,
+                        transaction_credit=line_credit,
+                        base_debit=line_debit,
+                        base_credit=line_credit,
+                    )
+                )
+
+            # Add the RE offset line if not zero
+            if abs(retained_earnings_amount) >= 0.01:
+                re_debit = 0.0
+                re_credit = 0.0
+                if (
+                    retained_earnings_amount > 0
+                ):  # Note: positive means we must debit RE (Net Loss)
+                    re_debit = retained_earnings_amount
+                else:  # Negative means we must credit RE (Net Income)
+                    re_credit = abs(retained_earnings_amount)
+
+                self.session.add(
+                    LedgerLine(
+                        journal_entry_id=closing_je.id,
+                        account_id=retained_earnings_account_id,
+                        description="Net Income/Loss transferred to Retained Earnings",
+                        currency_code="NGN",
+                        exchange_rate=1.0,
+                        transaction_debit=re_debit,
+                        transaction_credit=re_credit,
+                        base_debit=re_debit,
+                        base_credit=re_credit,
+                    )
+                )
 
         db_period.status = PeriodStatus.CLOSED
         db_period.closed_at = datetime.now(timezone.utc).replace(tzinfo=None)

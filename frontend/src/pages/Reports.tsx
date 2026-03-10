@@ -1,32 +1,42 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import api from "../lib/axios";
 import { exportToCsv } from "../lib/export";
+import { fiscalPeriodService } from "../services/fiscalPeriodService";
+import { trackingService } from "../services/trackingService";
+import { reportingService } from "../services/reportingService";
 import { Download } from "lucide-react";
 import { useCurrencyStore } from "../store/currencyStore";
 
 export default function Reports() {
-    const { baseCurrency } = useCurrencyStore();
-    const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(value);
-    };
+    const { formatCurrency } = useCurrencyStore();
 
     const [selectedPeriod, setSelectedPeriod] = useState<number>(0);
-    const [reportType, setReportType] = useState<"TB" | "PNL" | "BS">("TB");
+    const [reportType, setReportType] = useState<"TB" | "PNL" | "BS" | "TAX">("TB");
+    const [selectedTrackingOption, setSelectedTrackingOption] = useState<number>(0);
 
-    const { data: perRes } = useQuery({ queryKey: ["periods"], queryFn: async () => (await api.get("/periods/")).data });
+    const { data: perRes } = useQuery({ queryKey: ["periods"], queryFn: fiscalPeriodService.getPeriods });
     const periods = perRes?.data || [];
 
+    const { data: trackingRes } = useQuery({ queryKey: ["tracking-categories"], queryFn: trackingService.getCategories });
+    const trackingCategories = trackingRes?.data || trackingRes || [];
+
     const { data: reportData, isLoading } = useQuery({
-        queryKey: ["report", reportType, selectedPeriod],
+        queryKey: ["report", reportType, selectedPeriod, selectedTrackingOption],
         queryFn: async () => {
             if (!selectedPeriod) return null;
-            const route = reportType === "TB"
-                ? `/reports/trial-balance/${selectedPeriod}`
-                : reportType === "PNL"
-                    ? `/reports/profit-and-loss/${selectedPeriod}`
-                    : `/reports/balance-sheet/${selectedPeriod}`;
-            return (await api.get(route)).data.data;
+            if (reportType === "TB") {
+                const res = await reportingService.getTrialBalance(selectedPeriod);
+                return res.data;
+            } else if (reportType === "PNL") {
+                const res = await reportingService.getProfitAndLoss(selectedPeriod, selectedTrackingOption > 0 ? selectedTrackingOption : undefined);
+                return res.data;
+            } else if (reportType === "TAX") {
+                const res = await reportingService.getTaxLiability(selectedPeriod);
+                return res.data;
+            } else {
+                const res = await reportingService.getBalanceSheet(selectedPeriod);
+                return res.data;
+            }
         },
         enabled: selectedPeriod > 0
     });
@@ -56,6 +66,10 @@ export default function Reports() {
             reportData.equity_lines?.forEach((l: any) => rows.push(["Equity", l.account_code, l.account_name, l.balance]));
             rows.push(["", "", "Total Equity", reportData.total_equity]);
             rows.push(["", "", "Total Liabilities & Equity", reportData.total_liabilities_and_equity]);
+        } else if (reportType === "TAX") {
+            rows.push(["Tax Rate", "Rate %", "Output VAT (Collected)", "Input VAT (Paid)", "Net Liability"]);
+            reportData.lines?.forEach((l: any) => rows.push([l.tax_rate_name, l.tax_rate_percentage, l.total_collected, l.total_paid, l.net_liability]));
+            rows.push(["", "TOTAL", reportData.total_collected, reportData.total_paid, reportData.net_liability_total]);
         }
         exportToCsv(`${reportType}_${pName}.csv`, rows);
     };
@@ -65,15 +79,16 @@ export default function Reports() {
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-gray-100">Financial Reports</h1>
 
-                <div className="flex gap-4">
+                <div className="flex gap-4 items-center">
                     <select
                         value={reportType}
-                        onChange={(e) => setReportType(e.target.value as "TB" | "PNL" | "BS")}
+                        onChange={(e) => setReportType(e.target.value as "TB" | "PNL" | "BS" | "TAX")}
                         className="border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 shadow-sm"
                     >
                         <option value="TB">Trial Balance</option>
                         <option value="PNL">Profit & Loss</option>
                         <option value="BS">Balance Sheet</option>
+                        <option value="TAX">Tax Liability</option>
                     </select>
 
                     <select
@@ -84,6 +99,23 @@ export default function Reports() {
                         <option value={0}>Select Period...</option>
                         {periods.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
+
+                    {reportType === "PNL" && (
+                        <select
+                            value={selectedTrackingOption}
+                            onChange={(e) => setSelectedTrackingOption(Number(e.target.value))}
+                            className="border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 shadow-sm"
+                        >
+                            <option value={0}>All Tracking</option>
+                            {trackingCategories.filter((c: any) => c.is_active).map((c: any) => (
+                                <optgroup key={c.id} label={c.name}>
+                                    {c.options.filter((o: any) => o.is_active).map((o: any) => (
+                                        <option key={o.id} value={o.id}>{o.name}</option>
+                                    ))}
+                                </optgroup>
+                            ))}
+                        </select>
+                    )}
                 </div>
             </div>
 
@@ -224,6 +256,53 @@ export default function Reports() {
                                 <span>Total Liabilities & Equity</span>
                                 <span className="font-mono">{formatCurrency(reportData.total_liabilities_and_equity || 0)}</span>
                             </div>
+                        </div>
+                    )}
+
+                    {reportType === "TAX" && (
+                        <div>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-xl font-bold text-center flex-1 text-slate-900 dark:text-white underline">Tax Liability Report</h2>
+                                <button onClick={handleExport} className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-800/50 transition text-sm font-medium">
+                                    <Download className="w-4 h-4" /> Export CSV
+                                </button>
+                            </div>
+                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                                <thead>
+                                    <tr>
+                                        <th className="text-left font-semibold text-slate-600 dark:text-slate-400 py-2">Tax Rate</th>
+                                        <th className="text-right font-semibold text-slate-600 dark:text-slate-400 py-2">Rate %</th>
+                                        <th className="text-right font-semibold text-slate-600 dark:text-slate-400 py-2">Output (Collected)</th>
+                                        <th className="text-right font-semibold text-slate-600 dark:text-slate-400 py-2">Input (Paid)</th>
+                                        <th className="text-right font-semibold text-slate-600 dark:text-slate-400 py-2">Net Liability</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {reportData.lines?.map((line: any, i: number) => (
+                                        <tr key={i}>
+                                            <td className="py-2 text-slate-800 dark:text-slate-200">{line.tax_rate_name}</td>
+                                            <td className="py-2 text-right font-mono text-slate-600 dark:text-slate-300">{(line.tax_rate_percentage * 100).toFixed(2)}%</td>
+                                            <td className="py-2 text-right font-mono text-slate-600 dark:text-slate-300">{line.total_collected?.toFixed(2)}</td>
+                                            <td className="py-2 text-right font-mono text-slate-600 dark:text-slate-300">{line.total_paid?.toFixed(2)}</td>
+                                            <td className="py-2 text-right font-mono font-bold text-slate-800 dark:text-slate-100">{line.net_liability?.toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                    <tr className="font-bold border-t-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
+                                        <td className="py-3 uppercase tracking-wider" colSpan={2}>Total</td>
+                                        <td className="py-3 text-right font-mono">{reportData.total_collected?.toFixed(2)}</td>
+                                        <td className="py-3 text-right font-mono">{reportData.total_paid?.toFixed(2)}</td>
+                                        <td className="py-3 text-right font-mono text-lg">{reportData.net_liability_total?.toFixed(2)}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            {reportData.lines?.length === 0 && <p className="text-center text-slate-500 py-6">No tax data found.</p>}
+                            {reportData.net_liability_total > 0 ? (
+                                <p className="text-rose-500 font-medium text-center mt-4">You owe {formatCurrency(reportData.net_liability_total)} to the tax authority.</p>
+                            ) : reportData.net_liability_total < 0 ? (
+                                <p className="text-emerald-500 font-medium text-center mt-4">You are owed a refund of {formatCurrency(Math.abs(reportData.net_liability_total))}.</p>
+                            ) : (
+                                <p className="text-slate-500 font-medium text-center mt-4">No net tax liability for this period.</p>
+                            )}
                         </div>
                     )}
                 </div>

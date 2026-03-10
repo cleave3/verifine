@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../lib/axios';
+import { userService } from '../services/userService';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { Users as UsersIcon, UserPlus, Shield, RefreshCw } from 'lucide-react';
@@ -26,15 +26,15 @@ export default function Users() {
     const { data: users, isLoading } = useQuery({
         queryKey: ['users', currentOrg?.id],
         queryFn: async () => {
-            const res = await api.get('/users');
-            return res.data.data as User[];
+            const res = await userService.getUsers();
+            return res.data as User[];
         },
         enabled: !!currentOrg,
     });
 
     const inviteMutation = useMutation({
         mutationFn: async (data: { email: string; full_name: string; role: string }) => {
-            await api.post('/users/invite', data);
+            await userService.inviteUser(data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -48,7 +48,7 @@ export default function Users() {
 
     const roleMutation = useMutation({
         mutationFn: async (data: { userId: number; role: string }) => {
-            await api.patch(`/users/${data.userId}/role`, { role: data.role });
+            await userService.updateRole(data.userId, data.role);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -62,7 +62,7 @@ export default function Users() {
 
     const deactMutation = useMutation({
         mutationFn: async (userId: number) => {
-            await api.patch(`/users/${userId}/deactivate`);
+            await userService.deactivateUser(userId);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -73,7 +73,7 @@ export default function Users() {
 
     const reactivateMutation = useMutation({
         mutationFn: async (userId: number) => {
-            await api.patch(`/users/${userId}/reactivate`);
+            await userService.reactivateUser(userId);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['users'] });

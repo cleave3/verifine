@@ -4,8 +4,9 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, CreditCard, Activity, ArrowUpRight, Wallet, BarChart as BarChartIcon } from 'lucide-react';
 import { format } from 'date-fns';
-import api from '../lib/axios';
+import { dashboardService } from '../services/dashboardService';
 import { useAuthStore } from '../store/authStore';
+import { useCurrencyStore } from '../store/currencyStore';
 
 interface ChartDataPoint {
     name: string;
@@ -55,21 +56,15 @@ export default function Dashboard() {
     const { currentOrg } = useAuthStore();
     const primaryColor = currentOrg?.primary_color || '#4f46e5';
 
-    const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('en-NG', {
-            style: 'currency',
-            currency: currentOrg?.base_currency_code || 'NGN',
-            minimumFractionDigits: 0
-        }).format(value);
-    };
-
     const { data: dashboard, isLoading } = useQuery<DashboardData>({
         queryKey: ['dashboard-summary'],
         queryFn: async () => {
-            const res = await api.get('/dashboard/summary');
-            return res.data.data;
+            const res = await dashboardService.getSummary();
+            return res.data;
         },
     });
+
+    const { formatCurrency } = useCurrencyStore();
 
     if (isLoading) {
         return (

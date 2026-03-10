@@ -44,5 +44,10 @@ class LedgerLine(SQLModel, table=True):
     base_debit: float = Field(default=0.0)
     base_credit: float = Field(default=0.0)
     description: Optional[str] = None
+    is_reconciled: bool = Field(default=False)
+    reconciled_at: Optional[date] = None
+    tracking_option_id: Optional[int] = Field(
+        foreign_key="trackingoption.id", default=None, index=True
+    )
 
     journal_entry: JournalEntry = Relationship(back_populates="lines")

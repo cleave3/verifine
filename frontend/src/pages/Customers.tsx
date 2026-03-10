@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import api from "../lib/axios";
+import { customerService } from "../services/customerService";
 import { RoleGuard } from "../components/RoleGuard";
 
 const custSchema = z.object({
@@ -14,7 +14,6 @@ const custSchema = z.object({
     phone: z.string().optional(),
     payment_terms_days: z.coerce.number().min(0),
 });
-type CustFormValues = z.infer<typeof custSchema>;
 
 export default function Customers() {
     const queryClient = useQueryClient();
@@ -22,18 +21,13 @@ export default function Customers() {
 
     const { data: qRes, isLoading } = useQuery({
         queryKey: ["customers"],
-        queryFn: async () => {
-            const { data } = await api.get("/ar/customers/");
-            return data;
-        },
+        queryFn: customerService.getCustomers,
     });
 
     const items = qRes?.data || [];
 
     const createMutation = useMutation({
-        mutationFn: async (payload: CustFormValues) => {
-            return await api.post("/ar/customers/", payload);
-        },
+        mutationFn: customerService.createCustomer,
         onSuccess: () => {
             toast.success("Customer added successfully");
             queryClient.invalidateQueries({ queryKey: ["customers"] });

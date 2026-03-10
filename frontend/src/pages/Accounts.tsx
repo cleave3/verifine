@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import api from "../lib/axios";
+import { accountService } from "../services/accountService";
 import { RoleGuard } from "../components/RoleGuard";
 
 const accountSchema = z.object({
@@ -21,18 +21,13 @@ export default function Accounts() {
 
     const { data: accountsResponse, isLoading } = useQuery({
         queryKey: ["accounts"],
-        queryFn: async () => {
-            const { data } = await api.get("/accounts/");
-            return data;
-        },
+        queryFn: accountService.getAccounts,
     });
 
     const accounts = accountsResponse?.data || [];
 
     const createMutation = useMutation({
-        mutationFn: async (newAccount: AccountFormValues) => {
-            return await api.post("/accounts/", newAccount);
-        },
+        mutationFn: accountService.createAccount,
         onSuccess: () => {
             toast.success("Account created successfully");
             queryClient.invalidateQueries({ queryKey: ["accounts"] });

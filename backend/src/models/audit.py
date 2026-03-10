@@ -13,5 +13,12 @@ class AuditLog(SQLModel, table=True):
     entity_id: str
     previous_state: Optional[dict] = Field(default=None, sa_column=Column(JSON))
     new_state: Optional[dict] = Field(default=None, sa_column=Column(JSON))
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=datetime.now)
     ip_address: Optional[str] = None
+
+
+class AuditActionType(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(unique=True, index=True)  # e.g., "CREATE_VENDOR"
+    label: str  # e.g., "Create Vendor"
+    group: str  # e.g., "Accounts Payable"

@@ -12,7 +12,9 @@ from src.core.database import get_session
 from src.models.customer import Customer
 from src.models.invoice import Invoice, InvoiceLineItem, InvoiceStatus
 from src.models.account import Account
+from src.models.tax import TaxRate
 from src.models.fiscal_period import FiscalPeriod, PeriodStatus
+from src.models.item import Item, ItemType
 from src.modules.ar.ar_schema import CustomerCreate, CustomerUpdate, InvoiceCreate
 from src.modules.journal_entry.journal_entry_schema import (
     JournalEntryCreate,
@@ -171,7 +173,26 @@ class InvoiceService:
         if not customer:
             raise BadRequest("Invalid customer ID")
 
-        total_amount = sum(line.amount for line in invoice_in.lines)
+        tax_rates = {}
+        for line in invoice_in.lines:
+            if line.tax_rate_id and line.tax_rate_id not in tax_rates:
+                stmt = select(TaxRate).where(
+                    and_(TaxRate.id == line.tax_rate_id, TaxRate.org_id == org_id)
+                )
+                tr = (await self.session.exec(stmt)).first()
+                if not tr:
+                    raise BadRequest(f"Invalid tax rate ID {line.tax_rate_id}")
+                tax_rates[line.tax_rate_id] = tr
+
+        total_amount = 0.0
+        for line in invoice_in.lines:
+            line_amt = line.amount
+            if line.tax_rate_id:
+                tr = tax_rates[line.tax_rate_id]
+                tax_amt = round(line_amt * float(tr.rate), 4)
+                line_amt += tax_amt
+            total_amount += line_amt
+
         base_total_amount = round(total_amount * invoice_in.exchange_rate, 4)
 
         db_invoice = Invoice(
@@ -198,10 +219,13 @@ class InvoiceService:
             )
             db_line = InvoiceLineItem(
                 invoice_id=db_invoice.id,
+                item_id=line_in.item_id,
                 account_id=line_in.account_id,
                 description=line_in.description,
+                quantity=line_in.quantity if hasattr(line_in, "quantity") else 1.0,
                 amount=line_in.amount,
                 base_amount=base_amount,
+                tax_rate_id=line_in.tax_rate_id,
                 org_id=org_id,
             )
             self.session.add(db_line)
@@ -315,6 +339,65 @@ class InvoiceService:
                     description=line.description,
                 )
             )
+            if line.tax_rate_id:
+                stmt = select(TaxRate).where(TaxRate.id == line.tax_rate_id)
+                tr = (await self.session.exec(stmt)).first()
+                if tr:
+                    tax_amt = round(line.amount * float(tr.rate), 4)
+                    base_tax_amt = round(line.base_amount * float(tr.rate), 4)
+                    ledger_lines.append(
+                        LedgerLineCreate(
+                            account_id=tr.account_id,
+                            currency_code=db_invoice.currency_code,
+                            exchange_rate=db_invoice.exchange_rate,
+                            transaction_debit=0.0,
+                            transaction_credit=tax_amt,
+                            base_debit=0.0,
+                            base_credit=base_tax_amt,
+                            description=f"Tax for {line.description}",
+                        )
+                    )
+
+            # COGS logic for inventory items
+            if line.item_id:
+                stmt_item = select(Item).where(Item.id == line.item_id)
+                item = (await self.session.exec(stmt_item)).first()
+                if (
+                    item
+                    and item.type == ItemType.INVENTORY
+                    and item.cogs_account_id
+                    and item.asset_account_id
+                ):
+                    cogs_amt = item.unit_cost * line.quantity
+                    base_cogs_amt = round(cogs_amt * db_invoice.exchange_rate, 4)
+
+                    if cogs_amt > 0:
+                        # Debit COGS
+                        ledger_lines.append(
+                            LedgerLineCreate(
+                                account_id=item.cogs_account_id,
+                                currency_code=db_invoice.currency_code,
+                                exchange_rate=db_invoice.exchange_rate,
+                                transaction_debit=cogs_amt,
+                                transaction_credit=0.0,
+                                base_debit=base_cogs_amt,
+                                base_credit=0.0,
+                                description=f"COGS for {item.name}",
+                            )
+                        )
+                        # Credit Inventory Asset
+                        ledger_lines.append(
+                            LedgerLineCreate(
+                                account_id=item.asset_account_id,
+                                currency_code=db_invoice.currency_code,
+                                exchange_rate=db_invoice.exchange_rate,
+                                transaction_debit=0.0,
+                                transaction_credit=cogs_amt,
+                                base_debit=0.0,
+                                base_credit=base_cogs_amt,
+                                description=f"Inventory Decrease for {item.name}",
+                            )
+                        )
 
         # 4. Generate Journal Entry
         je_create = JournalEntryCreate(

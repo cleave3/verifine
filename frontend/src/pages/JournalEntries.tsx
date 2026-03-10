@@ -5,7 +5,10 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import api from "../lib/axios";
+import { journalEntryService } from "../services/journalEntryService";
+import { accountService } from "../services/accountService";
+import { fiscalPeriodService } from "../services/fiscalPeriodService";
+import { trackingService } from "../services/trackingService";
 import { exportToCsv } from "../lib/export";
 import { Download, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import { RoleGuard } from "../components/RoleGuard";
@@ -20,7 +23,8 @@ const jeSchema = z.object({
         account_id: z.coerce.number().min(1),
         transaction_debit: z.coerce.number().min(0).default(0),
         transaction_credit: z.coerce.number().min(0).default(0),
-        description: z.string().optional()
+        description: z.string().optional(),
+        tracking_option_id: z.coerce.number().optional().nullable().transform(v => v === 0 ? null : v)
     })).min(2),
 }).refine(data => {
     const totalD = data.lines.reduce((acc, curr) => acc + curr.transaction_debit, 0);
@@ -31,7 +35,7 @@ const jeSchema = z.object({
 type JEFormValues = z.infer<typeof jeSchema>;
 
 export default function JournalEntries() {
-    const { baseCurrency, activeRates } = useCurrencyStore();
+    const { baseCurrency, activeRates, formatCurrency } = useCurrencyStore();
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedEntry, setSelectedEntry] = useState<any>(null);
@@ -48,29 +52,29 @@ export default function JournalEntries() {
 
     const { data: jeRes, isLoading } = useQuery({
         queryKey: ["journal-entries", page, statusFilter, startDate, endDate],
-        queryFn: async () => (await api.get("/journal-entries/", {
-            params: {
-                page,
-                page_size: 10,
-                status: statusFilter || undefined,
-                start_date: startDate,
-                end_date: endDate
-            }
-        })).data
+        queryFn: () => journalEntryService.getJournalEntries({
+            page,
+            page_size: 10,
+            status: statusFilter || undefined,
+            start_date: startDate,
+            end_date: endDate
+        })
     });
     const { data: accRes } = useQuery({
         queryKey: ["accounts"],
-        queryFn: async () => (await api.get("/accounts/")).data
+        queryFn: accountService.getAccounts
     });
     const { data: perRes } = useQuery({
         queryKey: ["periods"],
-        queryFn: async () => (await api.get("/periods/")).data
+        queryFn: fiscalPeriodService.getPeriods
     });
+    const { data: trackingRes } = useQuery({ queryKey: ["tracking-categories"], queryFn: trackingService.getCategories });
 
     const entries = jeRes?.data?.results || [];
-    const pageInfo = jeRes?.data?.page_info || { current_page: 1, page_count: 1, total_count: 0, is_first_page: true, is_last_page: true };
+    const pageInfo = jeRes?.data?.meta || { current_page: 1, page_count: 1, total_count: 0, is_first_page: true, is_last_page: true };
     const accounts = accRes?.data || [];
     const periods = perRes?.data?.filter((p: any) => p.status === "OPEN") || [];
+    const trackingCategories = trackingRes?.data || trackingRes || [];
 
     const createMutation = useMutation({
         mutationFn: async (payload: JEFormValues) => {
@@ -85,7 +89,7 @@ export default function JournalEntries() {
                     exchange_rate
                 }))
             };
-            return await api.post("/journal-entries/", formattedPayload);
+            return await journalEntryService.createJournalEntry(formattedPayload);
         },
         onSuccess: () => {
             toast.success("Journal entry created successfully");
@@ -99,7 +103,7 @@ export default function JournalEntries() {
     });
 
     const postMutation = useMutation({
-        mutationFn: async (id: number) => await api.post(`/journal-entries/${id}/post`),
+        mutationFn: journalEntryService.postJournalEntry,
         onSuccess: () => {
             toast.success("Journal entry posted successfully");
             queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
@@ -118,8 +122,8 @@ export default function JournalEntries() {
             period_id: 0,
             currency_code: baseCurrency || "NGN",
             lines: [
-                { account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "" },
-                { account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "" }
+                { account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "", tracking_option_id: 0 },
+                { account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "", tracking_option_id: 0 }
             ]
         }
     });
@@ -389,18 +393,18 @@ export default function JournalEntries() {
                             {watchedCurrency !== baseCurrency && (
                                 <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-200 dark:border-slate-700 text-sm">
                                     <span className="font-semibold text-slate-700 dark:text-slate-300">Base Currency Equivalents ({baseCurrency}): </span>
-                                    <span className="text-indigo-600 dark:text-indigo-400">Debit: {new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(baseTotalDebit)}</span> |
-                                    <span className="text-rose-600 dark:text-rose-400 ml-2">Credit: {new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(baseTotalCredit)}</span>
+                                    <span className="text-indigo-600 dark:text-indigo-400">Debit: {formatCurrency(baseTotalDebit)}</span> |
+                                    <span className="text-rose-600 dark:text-rose-400 ml-2">Credit: {formatCurrency(baseTotalCredit)}</span>
                                 </div>
                             )}
 
                             <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
                                 <div className="flex justify-between items-center mb-2">
                                     <h3 className="text-sm font-bold text-slate-800 dark:text-white">Lines</h3>
-                                    <button type="button" onClick={() => append({ account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "" })} className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">+ Add Line</button>
+                                    <button type="button" onClick={() => append({ account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "", tracking_option_id: 0 })} className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">+ Add Line</button>
                                 </div>
                                 <div className="overflow-x-auto pb-4">
-                                    <div className="min-w-[500px]">
+                                    <div className="min-w-[600px]">
                                         {fields.map((field, index) => (
                                             <div key={field.id} className="flex gap-2 items-center mb-2">
                                                 <select {...form.register(`lines.${index}.account_id`)} className="flex-1 min-w-[150px] border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
@@ -409,6 +413,16 @@ export default function JournalEntries() {
                                                 </select>
                                                 <input type="number" step="0.01" placeholder="Debit" {...form.register(`lines.${index}.transaction_debit`)} className="w-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
                                                 <input type="number" step="0.01" placeholder="Credit" {...form.register(`lines.${index}.transaction_credit`)} className="w-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
+                                                <select {...form.register(`lines.${index}.tracking_option_id`)} className="w-36 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
+                                                    <option value={0}>No Tracking</option>
+                                                    {trackingCategories.filter((c: any) => c.is_active).map((c: any) => (
+                                                        <optgroup key={c.id} label={c.name}>
+                                                            {c.options.filter((o: any) => o.is_active).map((o: any) => (
+                                                                <option key={o.id} value={o.id}>{o.name}</option>
+                                                            ))}
+                                                        </optgroup>
+                                                    ))}
+                                                </select>
                                                 <button type="button" onClick={() => remove(index)} className="text-rose-500 px-2 font-bold shrink-0">✕</button>
                                             </div>
                                         ))}

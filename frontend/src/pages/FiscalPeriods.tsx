@@ -5,7 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { format } from "date-fns";
-import api from "../lib/axios";
+import { accountService } from "../services/accountService";
+import { fiscalPeriodService } from "../services/fiscalPeriodService";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RoleGuard } from "../components/RoleGuard";
 
@@ -29,20 +30,21 @@ export default function FiscalPeriods() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [confirmAction, setConfirmAction] = useState<{ type: 'LOCK' | 'CLOSE', id: number } | null>(null);
 
+    const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+    const [periodToClose, setPeriodToClose] = useState<any>(null);
+
+    const { data: accRes } = useQuery({ queryKey: ["accounts"], queryFn: accountService.getAccounts });
+    const accounts = accRes?.data?.filter((a: any) => a.type === 'EQUITY') || [];
+
     const { data: periodsResponse, isLoading } = useQuery({
         queryKey: ["periods"],
-        queryFn: async () => {
-            const { data } = await api.get("/periods/");
-            return data;
-        },
+        queryFn: fiscalPeriodService.getPeriods,
     });
 
     const periods = periodsResponse?.data || [];
 
     const createMutation = useMutation({
-        mutationFn: async (newPeriod: PeriodFormValues) => {
-            return await api.post("/periods/", newPeriod);
-        },
+        mutationFn: fiscalPeriodService.createPeriod,
         onSuccess: () => {
             toast.success("Fiscal period opened successfully");
             queryClient.invalidateQueries({ queryKey: ["periods"] });
@@ -50,24 +52,26 @@ export default function FiscalPeriods() {
             form.reset();
         },
         onError: (err: any) => {
-            toast.error(err.response?.data?.message || "Failed to open fiscal period");
+            toast.error(err.response?.data?.message || err.response?.data?.detail || "Failed to open fiscal period");
         }
     });
 
     const closeMutation = useMutation({
-        mutationFn: async (id: number) => await api.patch(`/periods/${id}/close`),
+        mutationFn: fiscalPeriodService.closePeriod,
         onSuccess: () => {
-            toast.success("Fiscal period closed successfully");
+            toast.success("Fiscal period closed and Net Income transferred to Retained Earnings.");
             queryClient.invalidateQueries({ queryKey: ["periods"] });
-            setConfirmAction(null);
+            setIsCloseModalOpen(false);
+            setPeriodToClose(null);
+            closeForm.reset();
         },
         onError: (err: any) => {
-            toast.error(err.response?.data?.message || "Failed to close fiscal period");
+            toast.error(err.response?.data?.message || err.response?.data?.detail || "Failed to close fiscal period");
         }
     });
 
     const lockMutation = useMutation({
-        mutationFn: async (id: number) => await api.patch(`/periods/${id}/lock`),
+        mutationFn: fiscalPeriodService.lockPeriod,
         onSuccess: () => {
             toast.success("Fiscal period locked successfully");
             queryClient.invalidateQueries({ queryKey: ["periods"] });
@@ -83,12 +87,24 @@ export default function FiscalPeriods() {
         defaultValues: { name: "", start_date: "", end_date: "" },
     });
 
+    const closeSchema = z.object({
+        retained_earnings_account_id: z.coerce.number().min(1, "Please select an account")
+    });
+    const closeForm = useForm({
+        resolver: zodResolver(closeSchema),
+        defaultValues: { retained_earnings_account_id: 0 }
+    });
+
     const onSubmit = (data: PeriodFormValues) => createMutation.mutate(data);
+    const onCloseSubmit = (data: any) => {
+        if (!periodToClose) return;
+        closeMutation.mutate({ id: periodToClose.id, retained_earnings_account_id: data.retained_earnings_account_id });
+    };
 
     return (
         <div className="p-6">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Fiscal Periods</h1>
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Fiscal Periods & Year-End Close</h1>
                 <RoleGuard allowedRoles={['admin', 'controller']}>
                     <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
                         + Open New Month
@@ -134,8 +150,8 @@ export default function FiscalPeriods() {
                                         )}
                                         {period.status !== "CLOSED" && (
                                             <RoleGuard allowedRoles={['admin', 'controller']}>
-                                                <button onClick={() => setConfirmAction({ type: 'CLOSE', id: period.id })} className="text-rose-600 dark:text-rose-400 hover:text-rose-900 dark:hover:text-rose-300 font-medium whitespace-nowrap">
-                                                    Hard Close
+                                                <button onClick={() => { setPeriodToClose(period); setIsCloseModalOpen(true); }} className="text-rose-600 dark:text-rose-400 hover:text-rose-900 dark:hover:text-rose-300 font-medium whitespace-nowrap">
+                                                    Hard Close / Year-End
                                                 </button>
                                             </RoleGuard>
                                         )}
@@ -179,6 +195,35 @@ export default function FiscalPeriods() {
                 </div>
             )}
 
+            {isCloseModalOpen && periodToClose && (
+                <div className="fixed inset-0 bg-black/50 z-100 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-lg shadow-2xl border border-rose-200 dark:border-rose-900/50">
+                        <h2 className="text-xl font-bold mb-2 text-rose-600 dark:text-rose-400">Hard Close: {periodToClose.name}</h2>
+                        <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
+                            Closing a period is irreversible. This action will compute the Net Income for this period and automatically generate a permanent Journal Entry that zeroes out all Revenue and Expense accounts, transferring the Net Income into your Retained Earnings equity account.
+                        </p>
+                        <form onSubmit={closeForm.handleSubmit(onCloseSubmit)} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Select Retained Earnings Account</label>
+                                <select {...closeForm.register("retained_earnings_account_id")} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
+                                    <option value={0}>-- Select Equity Account --</option>
+                                    {accounts.map((a: any) => (
+                                        <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                                    ))}
+                                </select>
+                                {closeForm.formState.errors.retained_earnings_account_id && <p className="text-rose-500 text-xs mt-1">{closeForm.formState.errors.retained_earnings_account_id.message as string}</p>}
+                            </div>
+                            <div className="flex justify-end gap-3 mt-6">
+                                <button type="button" onClick={() => { setIsCloseModalOpen(false); setPeriodToClose(null); }} className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Cancel</button>
+                                <button type="submit" disabled={closeMutation.isPending} className="px-4 py-2 bg-rose-600 text-white font-medium rounded-md hover:bg-rose-700 transition">
+                                    {closeMutation.isPending ? "Closing..." : "Execute Year-End Close"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             <ConfirmDialog
                 isOpen={confirmAction?.type === 'LOCK'}
                 title="Lock Fiscal Period"
@@ -186,16 +231,6 @@ export default function FiscalPeriods() {
                 confirmText="Yes, Lock Period"
                 type="warning"
                 onConfirm={() => confirmAction && lockMutation.mutate(confirmAction.id)}
-                onCancel={() => setConfirmAction(null)}
-            />
-
-            <ConfirmDialog
-                isOpen={confirmAction?.type === 'CLOSE'}
-                title="Hard Close Fiscal Period"
-                message="Are you sure you want to HARD CLOSE this period? This is irreversible. Absolutely no new entries can be posted."
-                confirmText="Yes, Hard Close"
-                type="danger"
-                onConfirm={() => confirmAction && closeMutation.mutate(confirmAction.id)}
                 onCancel={() => setConfirmAction(null)}
             />
         </div>

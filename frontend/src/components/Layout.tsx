@@ -1,9 +1,39 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon, Menu, X, FileText, Receipt, User as UserIcon, Activity } from "lucide-react";
+import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon, Menu, X, FileText, Receipt, User as UserIcon, Activity, Tags, Banknote, ReceiptText, Building, Package, ChevronDown, ChevronRight, Briefcase, ShoppingCart, Landmark, UsersRound, Boxes, MonitorDot } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RoleGuard } from "./RoleGuard";
+
+interface SidebarSectionProps {
+    title: string;
+    icon?: React.ElementType;
+    isExpanded: boolean;
+    onToggle: () => void;
+    children: React.ReactNode;
+}
+
+const SidebarSection = ({ title, icon: Icon, isExpanded, onToggle, children }: SidebarSectionProps) => {
+    return (
+        <div className="pt-2">
+            <button
+                onClick={onToggle}
+                className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-300 transition-colors"
+            >
+                <div className="flex items-center">
+                    {Icon && <Icon className="mr-2 h-4 w-4" />}
+                    {title}
+                </div>
+                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+            {isExpanded && (
+                <div className="mt-1 space-y-1 pl-2">
+                    {children}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function Layout() {
     const { user, currentOrg, logout } = useAuthStore();
@@ -27,6 +57,20 @@ export default function Layout() {
         return false;
     });
 
+    // Expanded states for sidebar sections
+    const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+        financials: true,
+        payables: false,
+        receivables: false,
+        team: false,
+        assets: false,
+        system: false,
+    });
+
+    const toggleSection = (section: string) => {
+        setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+    };
+
     useEffect(() => {
         if (isDarkMode) {
             document.documentElement.classList.add('dark');
@@ -48,6 +92,8 @@ export default function Layout() {
 
     const iconClass = (path: string) => `mr-3 h-5 w-5 ${isActive(path) ? "text-indigo-400" : "text-slate-400 group-hover:text-white"
         }`;
+
+
 
     return (
         <div className="flex h-screen bg-gray-50 dark:bg-slate-900 font-sans transition-colors overflow-hidden">
@@ -77,25 +123,31 @@ export default function Layout() {
                             <LayoutDashboard className={iconClass("/")} />
                             Dashboard
                         </Link>
-                        <Link to="/accounts" onClick={closeMobileMenu} className={linkClass("/accounts")}>
-                            <BookOpen className={iconClass("/accounts")} />
-                            Chart of Accounts
-                        </Link>
-                        <Link to="/periods" onClick={closeMobileMenu} className={linkClass("/periods")}>
-                            <Calendar className={iconClass("/periods")} />
-                            Fiscal Periods
-                        </Link>
-                        <Link to="/journal-entries" onClick={closeMobileMenu} className={linkClass("/journal-entries")}>
-                            <BookOpen className={iconClass("/journal-entries")} />
-                            General Ledger
-                        </Link>
-                        <Link to="/reports" onClick={closeMobileMenu} className={linkClass("/reports")}>
-                            <BarChart3 className={iconClass("/reports")} />
-                            Reports
-                        </Link>
 
-                        <div className="pt-4 mt-2 border-t border-slate-700/50">
-                            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Accounts Payable</p>
+                        <SidebarSection title="Core Financials" isExpanded={expandedSections.financials} onToggle={() => toggleSection("financials")} icon={Briefcase}>
+                            <Link to="/accounts" onClick={closeMobileMenu} className={linkClass("/accounts")}>
+                                <BookOpen className={iconClass("/accounts")} />
+                                Chart of Accounts
+                            </Link>
+                            <Link to="/periods" onClick={closeMobileMenu} className={linkClass("/periods")}>
+                                <Calendar className={iconClass("/periods")} />
+                                Fiscal Periods
+                            </Link>
+                            <Link to="/journal-entries" onClick={closeMobileMenu} className={linkClass("/journal-entries")}>
+                                <BookOpen className={iconClass("/journal-entries")} />
+                                General Ledger
+                            </Link>
+                            <Link to="/bank-rec" onClick={closeMobileMenu} className={linkClass("/bank-rec")}>
+                                <Activity className={iconClass("/bank-rec")} />
+                                Bank Reconciliation
+                            </Link>
+                            <Link to="/reports" onClick={closeMobileMenu} className={linkClass("/reports")}>
+                                <BarChart3 className={iconClass("/reports")} />
+                                Reports
+                            </Link>
+                        </SidebarSection>
+
+                        <SidebarSection title="Accounts Payable" isExpanded={expandedSections.payables} onToggle={() => toggleSection("payables")} icon={ShoppingCart}>
                             <Link to="/ap/vendors" onClick={closeMobileMenu} className={linkClass("/ap/vendors")}>
                                 <Users className={iconClass("/ap/vendors")} />
                                 Vendors
@@ -104,10 +156,9 @@ export default function Layout() {
                                 <Receipt className={iconClass("/ap/bills")} />
                                 Bills
                             </Link>
-                        </div>
+                        </SidebarSection>
 
-                        <div className="pt-4 mt-2 border-t border-slate-700/50">
-                            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Accounts Receivable</p>
+                        <SidebarSection title="Accounts Receivable" isExpanded={expandedSections.receivables} onToggle={() => toggleSection("receivables")} icon={Landmark}>
                             <Link to="/ar/customers" onClick={closeMobileMenu} className={linkClass("/ar/customers")}>
                                 <Users className={iconClass("/ar/customers")} />
                                 Customers
@@ -116,10 +167,35 @@ export default function Layout() {
                                 <FileText className={iconClass("/ar/invoices")} />
                                 Invoices
                             </Link>
-                        </div>
+                        </SidebarSection>
 
-                        <div className="pt-4 mt-2 border-t border-slate-700/50">
-                            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">System</p>
+                        <SidebarSection title="Team & Expenses" isExpanded={expandedSections.team} onToggle={() => toggleSection("team")} icon={UsersRound}>
+                            <Link to="/employees" onClick={closeMobileMenu} className={linkClass("/employees")}>
+                                <Users className={iconClass("/employees")} />
+                                Employees
+                            </Link>
+                            <Link to="/payroll" onClick={closeMobileMenu} className={linkClass("/payroll")}>
+                                <Banknote className={iconClass("/payroll")} />
+                                Payroll Runs
+                            </Link>
+                            <Link to="/expenses" onClick={closeMobileMenu} className={linkClass("/expenses")}>
+                                <ReceiptText className={iconClass("/expenses")} />
+                                Expense Claims
+                            </Link>
+                        </SidebarSection>
+
+                        <SidebarSection title="Assets & Inventory" isExpanded={expandedSections.assets} onToggle={() => toggleSection("assets")} icon={Boxes}>
+                            <Link to="/items" onClick={closeMobileMenu} className={linkClass("/items")}>
+                                <Package className={iconClass("/items")} />
+                                Products & Services
+                            </Link>
+                            <Link to="/fixed-assets" onClick={closeMobileMenu} className={linkClass("/fixed-assets")}>
+                                <Building className={iconClass("/fixed-assets")} />
+                                Fixed Assets
+                            </Link>
+                        </SidebarSection>
+
+                        <SidebarSection title="System" isExpanded={expandedSections.system} onToggle={() => toggleSection("system")} icon={MonitorDot}>
                             <RoleGuard allowedRoles={['admin', 'controller']}>
                                 <Link to="/audit" onClick={closeMobileMenu} className={linkClass("/audit")}>
                                     <Activity className={iconClass("/audit")} />
@@ -136,7 +212,17 @@ export default function Layout() {
                                 <SettingsIcon className={iconClass("/settings")} />
                                 Settings
                             </Link>
-                        </div>
+                            <RoleGuard allowedRoles={['admin', 'controller']}>
+                                <Link to="/taxes" onClick={closeMobileMenu} className={linkClass("/taxes")}>
+                                    <Receipt className={iconClass("/taxes")} />
+                                    Tax Rates
+                                </Link>
+                                <Link to="/tracking" onClick={closeMobileMenu} className={linkClass("/tracking")}>
+                                    <Tags className={iconClass("/tracking")} />
+                                    Tracking Categories
+                                </Link>
+                            </RoleGuard>
+                        </SidebarSection>
                     </nav>
                 </div>
                 <div className="p-4 border-t border-slate-800 shrink-0">

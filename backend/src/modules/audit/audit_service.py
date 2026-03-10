@@ -3,7 +3,7 @@ import uuid
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, func, and_
 from src.utils.common import get_pagination_meta
-from src.models.audit import AuditLog
+from src.models.audit import AuditLog, AuditActionType
 from src.models.user import User
 
 
@@ -63,3 +63,11 @@ class AuditService:
             "results": logs,
             "meta": get_pagination_meta(page, page_size, total_records),
         }
+
+    async def get_action_types(self) -> Sequence[AuditActionType]:
+        result = await self.session.exec(
+            select(AuditActionType).order_by(
+                AuditActionType.group, AuditActionType.label
+            )
+        )
+        return result.all()

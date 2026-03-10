@@ -39,10 +39,13 @@ class Bill(SQLModel, table=True):
 class BillLineItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     org_id: uuid.UUID = Field(foreign_key="organization.id")
+    item_id: Optional[int] = Field(default=None, foreign_key="item.id")
     bill_id: int = Field(foreign_key="bill.id")
     account_id: int = Field(foreign_key="account.id")  # Expense account
     description: str
+    quantity: float = Field(default=1.0)
     amount: float
     base_amount: float = Field(default=0.0)
+    tax_rate_id: Optional[int] = Field(default=None, foreign_key="taxrate.id")
 
     bill: Bill = Relationship(back_populates="lines")

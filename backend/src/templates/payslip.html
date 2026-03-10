@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            color: #333;
+            margin: 0;
+            padding: 40px;
+            line-height: 1.6;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #4f46e5;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .company-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4f46e5;
+            text-transform: uppercase;
+        }
+        .payslip-title {
+            font-size: 18px;
+            margin-top: 5px;
+            color: #666;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .grid {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .info-box {
+            width: 45%;
+        }
+        .label {
+            font-weight: bold;
+            color: #555;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .value {
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th {
+            background-color: #f9fafb;
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 14px;
+        }
+        .text-right {
+            text-align: right;
+        }
+        .total-row {
+            background-color: #f3f4f6;
+            font-weight: bold;
+        }
+        .net-pay-section {
+            margin-top: 40px;
+            padding: 20px;
+            background-color: #eef2ff;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .net-pay-label {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4338ca;
+        }
+        .net-pay-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1e1b4b;
+        }
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 10px;
+            color: #9ca3af;
+            border-top: 1px solid #f3f4f6;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="company-name">{{ organization.name }}</div>
+        <div class="payslip-title">PAYSLIP</div>
+    </div>
+
+    <div class="section">
+        <div style="display: table; width: 100%;">
+            <div style="display: table-cell; width: 50%;">
+                <div class="label">Employee Name</div>
+                <div class="value">{{ employee.first_name }} {{ employee.last_name }}</div>
+                
+                <div class="label">Email</div>
+                <div class="value">{{ employee.email }}</div>
+            </div>
+            <div style="display: table-cell; width: 50%;">
+                <div class="label">Department</div>
+                <div class="value">{{ department_name or 'N/A' }}</div>
+                
+                <div class="label">Pay Date</div>
+                <div class="value">{{ payroll_run.pay_date.strftime('%B %d, %Y') }}</div>
+            </div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th class="text-right">Earnings</th>
+                <th class="text-right">Deductions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Basic Salary</td>
+                <td class="text-right">{{ "{:,.2f}".format(payslip.gross_pay) }}</td>
+                <td class="text-right">-</td>
+            </tr>
+            <tr>
+                <td>Income Tax</td>
+                <td class="text-right">-</td>
+                <td class="text-right">{{ "{:,.2f}".format(payslip.tax_deduction) }}</td>
+            </tr>
+            {% if payslip.benefits_deduction > 0 %}
+            <tr>
+                <td>Benefits Deduction</td>
+                <td class="text-right">-</td>
+                <td class="text-right">{{ "{:,.2f}".format(payslip.benefits_deduction) }}</td>
+            </tr>
+            {% endif %}
+            <tr class="total-row">
+                <td>TOTALS</td>
+                <td class="text-right">{{ "{:,.2f}".format(total_earnings) }}</td>
+                <td class="text-right">{{ "{:,.2f}".format(total_deductions) }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="net-pay-section">
+        <span class="net-pay-label">NET PAY</span>
+        <span class="net-pay-value">{{ organization.base_currency_code }} {{ "{:,.2f}".format(payslip.net_pay) }}</span>
+    </div>
+
+    <div class="footer">
+        This is a computer-generated payslip and does not require a signature.<br>
+        &copy; {{ current_year }} {{ organization.name }}. All rights reserved.
+    </div>
+</body>
+</html>

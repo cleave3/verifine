@@ -13,22 +13,27 @@ class LedgerLineCreate(BaseModel):
     base_debit: float = 0.0
     base_credit: float = 0.0
     description: Optional[str] = None
+    tracking_option_id: Optional[int] = None
 
     @model_validator(mode="after")
     def check_debit_or_credit(self):
         if self.transaction_debit == 0 and self.transaction_credit == 0:
-            raise ValueError("Line must have either a transaction debit or credit amount")
+            raise ValueError(
+                "Line must have either a transaction debit or credit amount"
+            )
         if self.transaction_debit > 0 and self.transaction_credit > 0:
-            raise ValueError("Line cannot have both a transaction debit and a credit amount")
+            raise ValueError(
+                "Line cannot have both a transaction debit and a credit amount"
+            )
         if self.transaction_debit < 0 or self.transaction_credit < 0:
             raise ValueError("Amounts cannot be negative")
-            
+
         # Calculate base amounts if they are exactly 0 but transaction amount is > 0
         if self.base_debit == 0 and self.transaction_debit > 0:
             self.base_debit = round(self.transaction_debit * self.exchange_rate, 4)
         if self.base_credit == 0 and self.transaction_credit > 0:
             self.base_credit = round(self.transaction_credit * self.exchange_rate, 4)
-            
+
         return self
 
 
@@ -65,6 +70,7 @@ class LedgerLineRead(BaseModel):
     base_debit: float
     base_credit: float
     description: Optional[str]
+    tracking_option_id: Optional[int]
 
 
 class JournalEntryRead(BaseModel):

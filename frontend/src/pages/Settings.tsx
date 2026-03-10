@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api from "../lib/axios";
 import { useCurrencyStore } from "../store/currencyStore";
+import { settingsService } from "../services/settingsService";
 import { useAuthStore } from "../store/authStore";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import toast from "react-hot-toast";
@@ -18,7 +18,7 @@ export default function Settings() {
 
     const { data: settingsRes, isLoading } = useQuery({
         queryKey: ["settings"],
-        queryFn: async () => (await api.get("/settings")).data
+        queryFn: settingsService.getSettings
     });
 
     const settings = settingsRes?.data;
@@ -65,8 +65,8 @@ export default function Settings() {
         setLocalRates(formatted);
     }, [activeRates]);
 
-    const updateMutation = useMutation({
-        mutationFn: async (currency: string) => await api.patch("/settings/", { base_currency_code: currency }),
+    const updateCurrencyMutation = useMutation({
+        mutationFn: settingsService.updateBaseCurrency,
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["settings"] });
             await fetchSettingsAndRates(); // Update global store
@@ -78,7 +78,7 @@ export default function Settings() {
     });
 
     const updateOrgMutation = useMutation({
-        mutationFn: async (data: any) => await api.patch("/organizations/me", data),
+        mutationFn: settingsService.updateOrganizationSettings,
         onSuccess: async () => {
             await refreshOrg();
             toast.success("Organization details updated successfully!");
@@ -89,7 +89,7 @@ export default function Settings() {
     });
 
     const lockMutation = useMutation({
-        mutationFn: async () => await api.post("/settings/lock"),
+        mutationFn: settingsService.lockSystem,
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["settings"] });
             await fetchSettingsAndRates(); // Update global store
@@ -101,8 +101,8 @@ export default function Settings() {
         }
     });
 
-    const ratesMutation = useMutation({
-        mutationFn: async (rates: Record<string, number>) => await api.patch("/settings/exchange-rates", { rates }),
+    const updateRatesMutation = useMutation({
+        mutationFn: settingsService.updateExchangeRates,
         onSuccess: async () => {
             await fetchSettingsAndRates(); // Will refetch rates from backend
             toast.success("Exchange rates updated successfully!");
@@ -122,7 +122,7 @@ export default function Settings() {
             const num = parseFloat(v);
             if (!isNaN(num)) payload[k] = num;
         });
-        ratesMutation.mutate(payload);
+        updateRatesMutation.mutate(payload);
     };
 
     if (isLoading) return <div className="p-6 text-slate-500">Loading settings...</div>;
@@ -204,11 +204,11 @@ export default function Settings() {
                 <RoleGuard allowedRoles={['admin']}>
                     <div className="flex justify-end">
                         <button
-                            onClick={() => setIsConfirmOrgOpen(true)}
+                            type="submit"
                             disabled={updateOrgMutation.isPending}
-                            className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition disabled:bg-slate-400"
+                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
                         >
-                            {updateOrgMutation.isPending ? "Saving..." : "Save Profile"}
+                            {updateOrgMutation.isPending ? "Saving..." : "Save Organization Info"}
                         </button>
                     </div>
                 </RoleGuard>
@@ -233,11 +233,11 @@ export default function Settings() {
                         </select>
                         <RoleGuard allowedRoles={['admin']}>
                             <button
-                                onClick={() => setIsConfirmCurrencyOpen(true)}
-                                disabled={settings?.is_base_currency_locked || selectedCurrency === settings?.base_currency_code || updateMutation.isPending}
-                                className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition disabled:bg-slate-400"
+                                onClick={() => updateCurrencyMutation.mutate(selectedCurrency)}
+                                disabled={updateCurrencyMutation.isPending || selectedCurrency === settings.base_currency_code}
+                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-colors"
                             >
-                                Save Currency
+                                {updateCurrencyMutation.isPending ? "Updating..." : "Update Base Currency"}
                             </button>
                         </RoleGuard>
                     </div>
@@ -292,11 +292,11 @@ export default function Settings() {
                 <RoleGuard allowedRoles={['admin', 'controller', 'accountant']}>
                     <div className="flex justify-end">
                         <button
-                            onClick={() => setIsConfirmRatesOpen(true)}
-                            disabled={ratesMutation.isPending}
-                            className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition disabled:bg-slate-400"
+                            onClick={executeSaveRates}
+                            disabled={updateRatesMutation.isPending}
+                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none disabled:opacity-50"
                         >
-                            {ratesMutation.isPending ? "Saving..." : "Save Exchange Rates"}
+                            {updateRatesMutation.isPending ? "Saving Rates..." : "Save Custom Rates"}
                         </button>
                     </div>
                 </RoleGuard>
@@ -332,7 +332,7 @@ export default function Settings() {
                 confirmText="Yes, Save Currency"
                 type="primary"
                 onConfirm={() => {
-                    updateMutation.mutate(selectedCurrency);
+                    updateCurrencyMutation.mutate(selectedCurrency);
                     setIsConfirmCurrencyOpen(false);
                 }}
                 onCancel={() => setIsConfirmCurrencyOpen(false)}

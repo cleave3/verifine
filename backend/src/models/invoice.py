@@ -43,9 +43,12 @@ class InvoiceLineItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     org_id: uuid.UUID = Field(foreign_key="organization.id")
     invoice_id: int = Field(foreign_key="invoice.id")
+    item_id: Optional[int] = Field(default=None, foreign_key="item.id")
     account_id: int = Field(foreign_key="account.id")  # Revenue account
     description: str
+    quantity: float = Field(default=1.0)
     amount: float
     base_amount: float = Field(default=0.0)
+    tax_rate_id: Optional[int] = Field(default=None, foreign_key="taxrate.id")
 
     invoice: Invoice = Relationship(back_populates="lines")

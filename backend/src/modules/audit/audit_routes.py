@@ -8,6 +8,7 @@ from src.core.security_roles import role_required
 from src.models.user import UserRole
 from src.utils.common import response
 from src.modules.audit.audit_service import AuditService
+from src.modules.audit.audit_schema import AuditActionTypeRead
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -41,3 +42,26 @@ async def list_audit_logs(
     )
 
     return response(200, "Audit logs retrieved successfully", logs_data)
+
+
+@router.get(
+    "/action-types",
+    response_model=dict,
+    dependencies=[
+        Depends(
+            role_required([UserRole.ADMIN, UserRole.CONTROLLER, UserRole.ACCOUNTANT])
+        )
+    ],
+)
+async def list_audit_action_types(
+    audit_service: AuditService = Depends(get_audit_service),
+):
+    """
+    Retrieve all audit action types.
+    """
+    action_types = await audit_service.get_action_types()
+    return response(
+        200,
+        "Audit action types retrieved successfully",
+        [a.model_dump() for a in action_types],
+    )

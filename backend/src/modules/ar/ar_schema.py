@@ -38,6 +38,8 @@ class InvoiceLineItemBase(BaseModel):
     description: str
     amount: float
     base_amount: Optional[float] = None
+    tax_rate_id: Optional[int] = None
+    item_id: Optional[int] = None
 
 
 class InvoiceLineItemCreate(InvoiceLineItemBase):

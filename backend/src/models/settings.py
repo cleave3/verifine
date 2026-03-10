@@ -21,3 +21,10 @@ class ExchangeRate(SQLModel, table=True):
     org_id: uuid.UUID = Field(foreign_key="organization.id")
     currency_code: str = Field(index=True, max_length=3)
     rate: float = Field(default=1.0)  # The rate relative to the base currency
+
+
+class PayrollSettings(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    org_id: uuid.UUID = Field(foreign_key="organization.id", unique=True)
+    tax_percentage: float = Field(default=15.0)
+    benefits_percentage: float = Field(default=5.0)

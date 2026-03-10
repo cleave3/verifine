@@ -15,6 +15,8 @@ from src.modules.reporting.reporting_schema import (
     PLAccountLine,
     BalanceSheetReport,
     BalanceSheetAccountLine,
+    TaxLiabilityReport,
+    TaxLiabilityLine,
 )
 from src.models.fiscal_period import FiscalPeriod
 from src.models.account import Account, AccountType
@@ -107,6 +109,7 @@ async def get_trial_balance(
 @router.get("/profit-and-loss/{period_id}")
 async def get_profit_and_loss(
     period_id: int,
+    tracking_option_id: int | None = None,
     session: AsyncSession = Depends(get_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
@@ -129,9 +132,14 @@ async def get_profit_and_loss(
         .where(JournalEntry.period_id == period_id)
         .where(Account.org_id == org_id)
         .where(Account.type == AccountType.REVENUE)
-        .group_by(Account.id)
-        .order_by(Account.code)
     )
+
+    if tracking_option_id:
+        stmt_revenue = stmt_revenue.where(
+            LedgerLine.tracking_option_id == tracking_option_id
+        )
+
+    stmt_revenue = stmt_revenue.group_by(Account.id).order_by(Account.code)
 
     # Expense Accounts
     stmt_expense = (
@@ -145,9 +153,14 @@ async def get_profit_and_loss(
         .where(JournalEntry.period_id == period_id)
         .where(Account.org_id == org_id)
         .where(Account.type == AccountType.EXPENSE)
-        .group_by(Account.id)
-        .order_by(Account.code)
     )
+
+    if tracking_option_id:
+        stmt_expense = stmt_expense.where(
+            LedgerLine.tracking_option_id == tracking_option_id
+        )
+
+    stmt_expense = stmt_expense.group_by(Account.id).order_by(Account.code)
 
     rev_results = await session.exec(stmt_revenue)
     exp_results = await session.exec(stmt_expense)
@@ -305,3 +318,103 @@ async def get_balance_sheet(
     )
 
     return response(200, "Balance Sheet generated successfully", report.model_dump())
+
+
+from src.models.tax import TaxRate
+
+
+@router.get("/tax-liability/{period_id}")
+async def get_tax_liability(
+    period_id: int,
+    session: AsyncSession = Depends(get_session),
+    org_id: uuid.UUID = Depends(get_current_org),
+):
+    stmt_fp = select(FiscalPeriod).where(
+        and_(FiscalPeriod.id == period_id, FiscalPeriod.org_id == org_id)
+    )
+    period = (await session.exec(stmt_fp)).first()
+    if not period:
+        raise BadRequest("Fiscal period not found")
+
+    # Fetch all tax rates for the org
+    stmt_taxes = select(TaxRate).where(TaxRate.org_id == org_id)
+    tax_rates = (await session.exec(stmt_taxes)).all()
+
+    # Aggregate debit and credit balances per account ID linked to TaxRates in this period
+    # To optimize, we just query the balances of the required accounts for the period
+    tax_account_ids = list(set([t.account_id for t in tax_rates]))
+
+    if not tax_account_ids:
+        report = TaxLiabilityReport(
+            period_id=period_id,
+            lines=[],
+            total_collected=0.0,
+            total_paid=0.0,
+            net_liability_total=0.0,
+        )
+        return response(
+            200, "Tax Liability generated successfully", report.model_dump()
+        )
+
+    stmt_bals = (
+        select(
+            Account.id,
+            func.sum(LedgerLine.base_credit).label("total_credit"),
+            func.sum(LedgerLine.base_debit).label("total_debit"),
+        )
+        .join(LedgerLine, LedgerLine.account_id == Account.id)
+        .join(JournalEntry, JournalEntry.id == LedgerLine.journal_entry_id)
+        .where(JournalEntry.period_id == period_id)
+        .where(Account.id.in_(tax_account_ids))
+        .group_by(Account.id)
+    )
+
+    results = await session.exec(stmt_bals)
+
+    account_balances = {}
+    for act_id, credits, debits in results:
+        account_balances[act_id] = {
+            "credit": float(credits or 0),
+            "debit": float(debits or 0),
+        }
+
+    lines = []
+    total_collected_all = 0.0
+    total_paid_all = 0.0
+    net_liability_all = 0.0
+
+    # Note: If two TaxRates share an account_id, their values will be identical in this design.
+    for tr in tax_rates:
+        bals = account_balances.get(tr.account_id, {"credit": 0.0, "debit": 0.0})
+        collected = bals["credit"]  # Output VAT is usually credited
+        paid = bals["debit"]  # Input VAT is usually debited
+        net = collected - paid
+
+        lines.append(
+            TaxLiabilityLine(
+                tax_rate_id=tr.id,
+                tax_rate_name=tr.name,
+                tax_rate_percentage=float(tr.rate),
+                total_collected=collected,
+                total_paid=paid,
+                net_liability=net,
+            )
+        )
+        total_collected_all += collected
+        total_paid_all += paid
+        net_liability_all += net
+
+    # Deduplicate totals if accounts were shared, because we're just summing up everything by account
+    real_total_collected = sum(b.get("credit", 0) for b in account_balances.values())
+    real_total_paid = sum(b.get("debit", 0) for b in account_balances.values())
+    real_net = real_total_collected - real_total_paid
+
+    report = TaxLiabilityReport(
+        period_id=period_id,
+        lines=lines,
+        total_collected=round(real_total_collected, 2),
+        total_paid=round(real_total_paid, 2),
+        net_liability_total=round(real_net, 2),
+    )
+
+    return response(200, "Tax Liability generated successfully", report.model_dump())

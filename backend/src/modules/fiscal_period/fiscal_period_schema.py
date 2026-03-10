@@ -16,3 +16,7 @@ class FiscalPeriodRead(BaseModel):
     end_date: date
     status: PeriodStatus
     closed_at: str | None = None
+
+
+class FiscalPeriodClose(BaseModel):
+    retained_earnings_account_id: int

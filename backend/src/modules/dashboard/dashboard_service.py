@@ -174,7 +174,7 @@ class DashboardService:
             select(JournalEntry)
             .where(JournalEntry.org_id == org_id)
             .order_by(desc(JournalEntry.entry_date), desc(JournalEntry.id))
-            .limit(8)
+            .limit(6)
         )
         recent_jes = (await self.session.exec(recent_stmt)).all()
         recent_txs = []

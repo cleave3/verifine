@@ -14,4 +14,4 @@ class Organization(SQLModel, table=True):
     primary_color: Optional[str] = None
     address: Optional[str] = None
     tax_id: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)

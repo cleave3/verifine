@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { format } from "date-fns";
-import api from "../lib/axios";
+import { userService } from "../services/userService";
+import { auditService } from "../services/auditService";
 import { ChevronLeft, ChevronRight, Activity, Server, ArrowRight } from "lucide-react";
 import { RoleGuard } from "../components/RoleGuard";
 
@@ -12,24 +13,37 @@ export default function AuditLog() {
 
     const { data: usersRes } = useQuery({
         queryKey: ["users"],
-        queryFn: async () => (await api.get("/users/")).data
+        queryFn: userService.getUsers
+    });
+
+    const { data: actionTypesRes } = useQuery({
+        queryKey: ["audit-action-types"],
+        queryFn: auditService.getActionTypes
     });
 
     const { data: auditRes, isLoading } = useQuery({
         queryKey: ["audit", page, actionFilter, userFilter],
-        queryFn: async () => (await api.get("/audit", {
-            params: {
-                page,
-                page_size: 10,
-                action: actionFilter || undefined,
-                user_id: userFilter || undefined
-            }
-        })).data
+        queryFn: () => auditService.getLogs({
+            page,
+            page_size: 15,
+            action: actionFilter || undefined,
+            user_id: userFilter || undefined
+        })
     });
 
-    const logs = auditRes?.data?.results || [];
-    const pageInfo = auditRes?.data?.meta || { current_page: 1, page_count: 1, total_count: 0, is_first_page: true, is_last_page: true };
+    const logs = (auditRes as any)?.data?.results || [];
+    const pageInfo = (auditRes as any)?.data?.meta || { current_page: 1, page_count: 1, total_count: 0, is_first_page: true, is_last_page: true };
     const users = usersRes?.data || [];
+    const actionTypes = (actionTypesRes as any)?.data || [];
+
+    // Group action types by their specified 'group' field
+    const groupedActions = actionTypes.reduce((acc: Record<string, any[]>, curr: any) => {
+        if (!acc[curr.group]) {
+            acc[curr.group] = [];
+        }
+        acc[curr.group].push(curr);
+        return acc;
+    }, {});
 
     const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
@@ -60,41 +74,13 @@ export default function AuditLog() {
                             className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow min-w-[200px]"
                         >
                             <option value="">All Actions</option>
-                            <optgroup label="Core Settings & Periods">
-                                <option value="LOCK_FISCAL_PERIOD">Lock Fiscal Period</option>
-                                <option value="CLOSE_FISCAL_PERIOD">Close Fiscal Period</option>
-                                <option value="UPDATE_COMPANY_SETTINGS">Update Settings</option>
-                                <option value="LOCK_BASE_CURRENCY">Lock Core Currency</option>
-                                <option value="UPDATE_ORGANIZATION">Update Organization profile</option>
-                                <option value="UPDATE_EXCHANGE_RATES">Update Exchange rates</option>
-                            </optgroup>
-                            <optgroup label="Accounts Payable">
-                                <option value="CREATE_VENDOR">Create Vendor</option>
-                                <option value="UPDATE_VENDOR">Update Vendor</option>
-                                <option value="CREATE_BILL">Create Bill</option>
-                                <option value="APPROVE_BILL">Approve Bill</option>
-                                <option value="POST_BILL">Post Bill</option>
-                                <option value="PAY_BILL">Pay Bill</option>
-                            </optgroup>
-                            <optgroup label="Accounts Receivable">
-                                <option value="CREATE_CUSTOMER">Create Customer</option>
-                                <option value="UPDATE_CUSTOMER">Update Customer</option>
-                                <option value="CREATE_INVOICE">Create Invoice</option>
-                                <option value="MARK_INVOICE_SENT">Send Invoice</option>
-                                <option value="POST_INVOICE">Post Invoice</option>
-                                <option value="PAY_INVOICE">Pay Invoice</option>
-                            </optgroup>
-                            <optgroup label="General Ledger">
-                                <option value="CREATE_ACCOUNT">Create Account</option>
-                                <option value="UPDATE_ACCOUNT">Update Account</option>
-                                <option value="POST_JOURNAL_ENTRY">Post Journal Entry</option>
-                            </optgroup>
-                            <optgroup label="Users">
-                                <option value="INVITE_USER">Invite User</option>
-                                <option value="UPDATE_USER_ROLE">Update User Role</option>
-                                <option value="DEACTIVATE_USER">Deactivate User</option>
-                                <option value="REACTIVATE_USER">Reactivate User</option>
-                            </optgroup>
+                            {Object.entries(groupedActions).map(([groupName, actions]: [string, any]) => (
+                                <optgroup key={groupName} label={groupName}>
+                                    {actions.map((action: any) => (
+                                        <option key={action.name} value={action.name}>{action.label}</option>
+                                    ))}
+                                </optgroup>
+                            ))}
                         </select>
                     </div>
 

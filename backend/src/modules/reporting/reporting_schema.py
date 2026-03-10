@@ -49,3 +49,20 @@ class BalanceSheetReport(BaseModel):
     total_equity: float
     total_liabilities_and_equity: float
     is_balanced: bool
+
+
+class TaxLiabilityLine(BaseModel):
+    tax_rate_id: int
+    tax_rate_name: str
+    tax_rate_percentage: float
+    total_collected: float
+    total_paid: float
+    net_liability: float
+
+
+class TaxLiabilityReport(BaseModel):
+    period_id: int
+    lines: List[TaxLiabilityLine]
+    total_collected: float
+    total_paid: float
+    net_liability_total: float

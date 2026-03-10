@@ -15,6 +15,13 @@ from src.modules.settings.settings_routes import router as settings_router
 from src.modules.organization.organization_routes import router as organization_router
 from src.modules.users.users_routes import router as users_router
 from src.modules.audit.audit_routes import router as audit_router
+from src.modules.tax.tax_routes import router as tax_router
+from src.modules.bank_rec.bank_rec_routes import router as bank_rec_router
+from src.modules.tracking.tracking_routes import router as tracking_router
+from src.modules.payroll.payroll_routes import router as payroll_router
+from src.modules.expense.expense_routes import router as expense_router
+from src.modules.fixed_asset.fixed_asset_routes import router as fixed_asset_router
+from src.modules.item.item_routes import router as item_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -29,3 +36,10 @@ api_router.include_router(settings_router)
 api_router.include_router(organization_router)
 api_router.include_router(users_router)
 api_router.include_router(audit_router)
+api_router.include_router(tax_router)
+api_router.include_router(bank_rec_router)
+api_router.include_router(tracking_router)
+api_router.include_router(payroll_router)
+api_router.include_router(expense_router)
+api_router.include_router(fixed_asset_router)
+api_router.include_router(item_router)

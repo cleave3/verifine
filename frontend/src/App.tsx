@@ -18,6 +18,14 @@ import Settings from "./pages/Settings";
 import Users from "./pages/Users";
 import Profile from "./pages/Profile";
 import AuditLog from "./pages/AuditLog";
+import TaxRates from "./pages/TaxRates";
+import TrackingCategories from "./pages/TrackingCategories";
+import BankReconciliation from "./pages/BankReconciliation";
+import Employees from "./pages/Employees";
+import Payroll from "./pages/Payroll";
+import ExpenseClaims from "./pages/ExpenseClaims";
+import FixedAssets from "./pages/FixedAssets";
+import Items from "./pages/Items";
 import { useCurrencyStore } from "./store/currencyStore";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -64,6 +72,14 @@ function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="users" element={<Users />} />
             <Route path="audit" element={<AuditLog />} />
+            <Route path="taxes" element={<TaxRates />} />
+            <Route path="tracking" element={<TrackingCategories />} />
+            <Route path="bank-rec" element={<BankReconciliation />} />
+            <Route path="employees" element={<Employees />} />
+            <Route path="payroll" element={<Payroll />} />
+            <Route path="expenses" element={<ExpenseClaims />} />
+            <Route path="fixed-assets" element={<FixedAssets />} />
+            <Route path="items" element={<Items />} />
             <Route path="profile" element={<Profile />} />
           </Route>
 

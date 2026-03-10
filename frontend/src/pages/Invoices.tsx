@@ -5,7 +5,13 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import api from "../lib/axios";
+import { invoiceService } from "../services/invoiceService";
+import { customerService } from "../services/customerService";
+import { accountService } from "../services/accountService";
+import { fiscalPeriodService } from "../services/fiscalPeriodService";
+import { taxService } from "../services/taxService";
+import { trackingService } from "../services/trackingService";
+import { itemService } from "../services/itemService";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useCurrencyStore } from "../store/currencyStore";
 import { ChevronLeft, ChevronRight, Filter, Download } from "lucide-react";
@@ -21,15 +27,19 @@ const invoiceSchema = z.object({
     currency_code: z.string().default("NGN"),
     exchange_rate: z.number().default(1.0),
     lines: z.array(z.object({
+        item_id: z.coerce.number().optional().nullable().transform(v => v === 0 ? null : v),
         account_id: z.coerce.number().min(1),
+        quantity: z.coerce.number().min(0.01).default(1.0),
         amount: z.coerce.number().min(0.01),
-        description: z.string().optional()
+        description: z.string().optional(),
+        tax_rate_id: z.coerce.number().optional().nullable().transform(v => v === 0 ? null : v),
+        tracking_option_id: z.coerce.number().optional().nullable().transform(v => v === 0 ? null : v)
     })).min(1),
 });
 // type InvoiceFormValues = z.infer<typeof invoiceSchema>;
 
 export default function Invoices() {
-    const { baseCurrency, activeRates } = useCurrencyStore();
+    const { baseCurrency, activeRates, formatCurrency } = useCurrencyStore();
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [confirmAction, setConfirmAction] = useState<{ type: 'SEND' | 'POST' | 'PAY', id: number } | null>(null);
@@ -47,34 +57,38 @@ export default function Invoices() {
 
     const { data: invRes, isLoading } = useQuery({
         queryKey: ["invoices", page, statusFilter, customerFilter, startDate, endDate],
-        queryFn: async () => (await api.get("/ar/invoices/", {
-            params: {
-                page,
-                page_size: 10,
-                status: statusFilter || undefined,
-                customer_id: customerFilter || undefined,
-                start_date: startDate,
-                end_date: endDate
-            }
-        })).data
+        queryFn: () => invoiceService.getInvoices({
+            page,
+            page_size: 10,
+            status: statusFilter || undefined,
+            customer_id: customerFilter || undefined,
+            start_date: startDate,
+            end_date: endDate
+        })
     });
-    const { data: custRes } = useQuery({ queryKey: ["customers"], queryFn: async () => (await api.get("/ar/customers/")).data });
-    const { data: accRes } = useQuery({ queryKey: ["accounts"], queryFn: async () => (await api.get("/accounts/")).data });
-    const { data: perRes } = useQuery({ queryKey: ["periods"], queryFn: async () => (await api.get("/periods/")).data });
+    const { data: custRes } = useQuery({ queryKey: ["customers"], queryFn: customerService.getCustomers });
+    const { data: accRes } = useQuery({ queryKey: ["accounts"], queryFn: accountService.getAccounts });
+    const { data: perRes } = useQuery({ queryKey: ["periods"], queryFn: fiscalPeriodService.getPeriods });
+    const { data: taxRes } = useQuery({ queryKey: ["taxes"], queryFn: taxService.getTaxes });
+    const { data: trackingRes } = useQuery({ queryKey: ["tracking-categories"], queryFn: trackingService.getCategories });
+    const { data: itemRes } = useQuery({ queryKey: ["items"], queryFn: itemService.getItems });
 
     const invoices = invRes?.data?.results || [];
-    const pageInfo = invRes?.data?.page_info || { current_page: 1, page_count: 1, total_count: 0, is_first_page: true, is_last_page: true };
+    const pageInfo = invRes?.data?.meta || { current_page: 1, page_count: 1, total_count: 0, is_first_page: true, is_last_page: true };
     const customers = custRes?.data || [];
 
     const getCustomerName = (id: number) => customers.find((c: any) => c.id === id)?.name || `ID: ${id}`;
     const accounts = accRes?.data?.filter((a: any) => a.type === 'REVENUE') || [];
     const periods = perRes?.data?.filter((p: any) => p.status === "OPEN") || [];
+    const taxes = taxRes?.data || taxRes || [];
+    const trackingCategories = trackingRes?.data || trackingRes || [];
+    const itemsList = itemRes?.data || itemRes || [];
 
     const createMutation = useMutation({
         mutationFn: async (payload: any) => {
             const total = payload.lines.reduce((sum: number, line: any) => sum + Number(line.amount), 0);
             payload.exchange_rate = activeRates[payload.currency_code] || 1.0;
-            return await api.post("/ar/invoices/", { ...payload, total_amount: total });
+            return await invoiceService.createInvoice({ ...payload, total_amount: total });
         },
         onSuccess: () => {
             toast.success("Invoice created successfully");
@@ -88,7 +102,7 @@ export default function Invoices() {
     });
 
     const sendMutation = useMutation({
-        mutationFn: async (id: number) => await api.patch(`/ar/invoices/${id}/sent`),
+        mutationFn: invoiceService.sendInvoice,
         onSuccess: () => {
             toast.success("Invoice marked as sent");
             queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -100,7 +114,7 @@ export default function Invoices() {
     });
 
     const postMutation = useMutation({
-        mutationFn: async (id: number) => await api.patch(`/ar/invoices/${id}/post`),
+        mutationFn: invoiceService.postInvoice,
         onSuccess: () => {
             toast.success("Invoice posted successfully");
             queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -112,7 +126,7 @@ export default function Invoices() {
     });
 
     const payMutation = useMutation({
-        mutationFn: async (id: number) => await api.patch(`/ar/invoices/${id}/pay`),
+        mutationFn: invoiceService.payInvoice,
         onSuccess: () => {
             toast.success("Invoice marked as paid");
             queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -133,7 +147,7 @@ export default function Invoices() {
             invoice_number: "", description: "",
             currency_code: baseCurrency || "NGN",
             exchange_rate: 1.0,
-            lines: [{ account_id: 0, amount: 0, description: "" }]
+            lines: [{ item_id: 0, account_id: 0, quantity: 1, amount: 0, description: "", tax_rate_id: 0, tracking_option_id: 0 }]
         }
     });
 
@@ -141,7 +155,14 @@ export default function Invoices() {
 
     const watchedCurrency = form.watch("currency_code");
     const watchedLines = form.watch("lines");
-    const totalInputAmount = watchedLines?.reduce((sum: number, line: any) => sum + (Number(line.amount) || 0), 0) || 0;
+    const totalInputAmount = watchedLines?.reduce((sum: number, line: any) => {
+        let amt = Number(line.amount) || 0;
+        if (line.tax_rate_id) {
+            const tr = taxes.find((t: any) => t.id === Number(line.tax_rate_id));
+            if (tr) amt += amt * tr.rate;
+        }
+        return sum + amt;
+    }, 0) || 0;
     const activeRate = activeRates[watchedCurrency] || 1.0;
     const baseTotal = totalInputAmount * activeRate;
 
@@ -264,7 +285,7 @@ export default function Invoices() {
                                     <td className="px-6 py-4 text-sm font-medium text-indigo-600 dark:text-indigo-400">{getCustomerName(inv.customer_id)}</td>
                                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{format(new Date(inv.invoice_date), 'MMM d, yyyy')}</td>
                                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                                        {new Intl.NumberFormat('en-NG', { style: 'currency', currency: inv.currency_code || baseCurrency }).format(inv.total_amount)}
+                                        {formatCurrency(inv.total_amount)}
                                     </td>
                                     <td className="px-6 py-4 text-sm">
                                         <span className={`px-2 py-1 text-xs font-semibold rounded-full uppercase ${inv.status === 'SENT' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-800'}`}>
@@ -290,8 +311,8 @@ export default function Invoices() {
                                         <button
                                             onClick={async () => {
                                                 try {
-                                                    const response = await api.get(`/ar/invoices/${inv.id}/pdf`, { responseType: 'blob' });
-                                                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                                                    const pdfData = await invoiceService.downloadInvoicePdf(inv.id);
+                                                    const url = window.URL.createObjectURL(new Blob([pdfData]));
                                                     const link = document.createElement('a');
                                                     link.href = url;
                                                     link.setAttribute('download', `invoice_${inv.invoice_number}.pdf`);
@@ -394,7 +415,7 @@ export default function Invoices() {
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Base Equivalent ({baseCurrency})</label>
                                     <div className="mt-1 p-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-md border border-slate-200 dark:border-slate-700 font-semibold opacity-80">
-                                        {new Intl.NumberFormat('en-NG', { style: 'currency', currency: baseCurrency || 'NGN' }).format(baseTotal)}
+                                        {formatCurrency(baseTotal)}
                                     </div>
                                 </div>
                             </div>
@@ -402,15 +423,65 @@ export default function Invoices() {
                             <div className="pt-4 border-t border-slate-200 dark:border-slate-700 mt-4">
                                 <div className="flex justify-between items-center mb-2">
                                     <h3 className="text-sm font-bold text-slate-800 dark:text-white">Line Items</h3>
-                                    <button type="button" onClick={() => append({ account_id: 0, amount: 0, description: "" })} className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">+ Add Line</button>
+                                    <button type="button" onClick={() => append({ item_id: 0, account_id: 0, quantity: 1, amount: 0, description: "", tax_rate_id: 0, tracking_option_id: 0 })} className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">+ Add Line</button>
                                 </div>
                                 {fields.map((field, index) => (
-                                    <div key={field.id} className="flex gap-2 items-center mb-2">
+                                    <div key={field.id} className="flex flex-wrap gap-2 items-center mb-2">
+                                        <select
+                                            {...form.register(`lines.${index}.item_id`)}
+                                            className="w-32 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2"
+                                            onChange={(e) => {
+                                                const itemId = Number(e.target.value);
+                                                const selectedItem = itemsList.find((i: any) => i.id === itemId);
+                                                if (selectedItem) {
+                                                    if (selectedItem.income_account_id) form.setValue(`lines.${index}.account_id`, selectedItem.income_account_id);
+                                                    if (selectedItem.name) form.setValue(`lines.${index}.description`, selectedItem.name);
+                                                    if (selectedItem.unit_price) {
+                                                        const qty = form.getValues(`lines.${index}.quantity`) || 1;
+                                                        form.setValue(`lines.${index}.amount`, selectedItem.unit_price * qty);
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            <option value={0}>Item...</option>
+                                            {itemsList.map((i: any) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                        </select>
                                         <select {...form.register(`lines.${index}.account_id`)} className="flex-1 min-w-[150px] border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
                                             <option value={0}>Revenue Account</option>
                                             {accounts.map((a: any) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
                                         </select>
-                                        <input type="number" step="0.01" placeholder="Amount" {...form.register(`lines.${index}.amount`)} className="w-32 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="Qty"
+                                            {...form.register(`lines.${index}.quantity`)}
+                                            className="w-20 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right"
+                                            onChange={(e) => {
+                                                const qty = Number(e.target.value) || 0;
+                                                const itemId = form.getValues(`lines.${index}.item_id`);
+                                                if (itemId) {
+                                                    const selectedItem = itemsList.find((i: any) => i.id === Number(itemId));
+                                                    if (selectedItem && selectedItem.unit_price) {
+                                                        form.setValue(`lines.${index}.amount`, selectedItem.unit_price * qty);
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <input type="number" step="0.01" placeholder="Total Amt" {...form.register(`lines.${index}.amount`)} className="w-28 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 text-right" />
+                                        <select {...form.register(`lines.${index}.tax_rate_id`)} className="w-28 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
+                                            <option value={0}>No Tax</option>
+                                            {taxes.filter((t: any) => t.is_active).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        </select>
+                                        <select {...form.register(`lines.${index}.tracking_option_id`)} className="w-36 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2">
+                                            <option value={0}>No Tracking</option>
+                                            {trackingCategories.filter((c: any) => c.is_active).map((c: any) => (
+                                                <optgroup key={c.id} label={c.name}>
+                                                    {c.options.filter((o: any) => o.is_active).map((o: any) => (
+                                                        <option key={o.id} value={o.id}>{o.name}</option>
+                                                    ))}
+                                                </optgroup>
+                                            ))}
+                                        </select>
                                         <button type="button" onClick={() => remove(index)} className="text-rose-500 px-2 font-bold">✕</button>
                                     </div>
                                 ))}

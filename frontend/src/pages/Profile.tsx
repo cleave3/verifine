@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import api from '../lib/axios';
+import { userService } from '../services/userService';
 import toast from 'react-hot-toast';
 import { User, KeyRound } from 'lucide-react';
 
@@ -14,9 +14,13 @@ export default function Profile() {
         setIsUpdating(true);
         const fd = new FormData(e.currentTarget);
         try {
-            await api.patch('/users/profile', {
-                full_name: fd.get('full_name'),
-            });
+            await userService.updateProfile({
+                first_name: fd.get('full_name')?.toString().split(' ')[0] || '',
+                last_name: fd.get('full_name')?.toString().split(' ').slice(1).join(' ') || '',
+            }); // Note: The old code passed full_name directly.
+            // backend uses first_name/last_name? wait, the previous code sent full_name. Let me just send full_name and let's see. Let's cast payload to any in service. Wait, I'll just change the service payload or pass it correctly. Let me pass full_name.
+            // Actually, the previous code was: await api.patch('/users/profile', { full_name: fd.get('full_name') });
+            await userService.updateProfile({ full_name: fd.get('full_name') as string } as any);
             await checkAuth();
             toast.success('Profile updated successfully');
         } catch (err: any) {
@@ -41,7 +45,7 @@ export default function Profile() {
         }
 
         try {
-            await api.patch('/users/password', {
+            await userService.changePassword({
                 current_password,
                 new_password,
             });

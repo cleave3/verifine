@@ -5,7 +5,10 @@ from src.core.database import get_session
 from src.core.errors import BadRequest
 from src.utils.common import response
 from src.core.tenant import get_current_org
-from src.modules.fiscal_period.fiscal_period_schema import FiscalPeriodCreate
+from src.modules.fiscal_period.fiscal_period_schema import (
+    FiscalPeriodCreate,
+    FiscalPeriodClose,
+)
 from src.modules.fiscal_period.fiscal_period_service import (
     FiscalPeriodService,
     get_fiscal_period_service,
@@ -87,6 +90,7 @@ async def lock_period(
 async def close_period(
     request: Request,
     id: int,
+    request_data: FiscalPeriodClose,
     period_service: FiscalPeriodService = Depends(get_fiscal_period_service),
     org_id: uuid.UUID = Depends(get_current_org),
     current_user: User = Depends(role_required([UserRole.ADMIN, UserRole.CONTROLLER])),
@@ -102,7 +106,9 @@ async def close_period(
         raise BadRequest("Period is already closed")
 
     prev_state = period.model_dump()
-    closed_period = await period_service.close_period(org_id, id)
+    closed_period = await period_service.close_period(
+        org_id, id, request_data.retained_earnings_account_id
+    )
 
     client_ip = request.client.host if request.client else None
     await log_audit_event(

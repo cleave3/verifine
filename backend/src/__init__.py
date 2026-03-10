@@ -14,9 +14,6 @@ from src.utils.common import response
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_db()
-    from src.core.seed import seed_db
-
-    await seed_db()
     yield
     await disconnect_from_db()
 
@@ -29,7 +26,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
