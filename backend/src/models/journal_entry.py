@@ -25,7 +25,7 @@ class JournalEntry(SQLModel, table=True):
     entry_date: date = Field(index=True)
     status: JournalEntryStatus = Field(default=JournalEntryStatus.DRAFT)
     period_id: int = Field(foreign_key="fiscalperiod.id")
-    created_by_id: int = Field(foreign_key="user.id")
+    created_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
 
     lines: List["LedgerLine"] = Relationship(back_populates="journal_entry")
 

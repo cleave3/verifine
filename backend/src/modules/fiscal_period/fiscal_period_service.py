@@ -93,8 +93,13 @@ class FiscalPeriodService:
     async def close_period(
         self, org_id: uuid.UUID, period_id: int, retained_earnings_account_id: int
     ) -> Optional[FiscalPeriod]:
-        from src.models.account import Account, AccountType
-        from src.models.journal_entry import JournalEntry, LedgerLine, JournalStatus
+        from src.models import (
+            JournalEntry,
+            LedgerLine,
+            JournalEntryStatus,
+            Account,
+            AccountType,
+        )
         from sqlmodel import func
 
         db_period = await self.get_period_by_id(org_id, period_id)
@@ -128,7 +133,7 @@ class FiscalPeriodService:
             .where(
                 JournalEntry.org_id == org_id,
                 JournalEntry.period_id == period_id,
-                JournalEntry.status == JournalStatus.POSTED,
+                JournalEntry.status == JournalEntryStatus.POSTED,
                 Account.type.in_([AccountType.REVENUE, AccountType.EXPENSE]),
             )
             .group_by(LedgerLine.account_id, Account.type)
@@ -136,14 +141,19 @@ class FiscalPeriodService:
         balances = (await self.session.exec(stmt)).all()
 
         if balances:
-            # We need to create a closing Journal Entry
+            # Generate a unique transaction ID for the closing entry
+            transaction_id = (
+                f"CLS-{db_period.name}-{db_period.end_date.strftime('%Y%m%d')}"
+            )
+
             closing_je = JournalEntry(
                 org_id=org_id,
+                transaction_id=transaction_id,
                 period_id=period_id,
                 entry_date=db_period.end_date,
                 description=f"Year-End Closing for {db_period.name}",
-                status=JournalStatus.POSTED,
-                created_by="SYSTEM",
+                status=JournalEntryStatus.POSTED,
+                created_by_id=None,
             )
             self.session.add(closing_je)
             await self.session.flush()
@@ -169,10 +179,11 @@ class FiscalPeriodService:
                     line_debit = abs(balance)
                     retained_earnings_amount += abs(
                         balance
-                    )  # We debit the account, so we credit RE to balance
+                    )  # We debit the account, so we debit RE to balance
 
                 self.session.add(
                     LedgerLine(
+                        org_id=org_id,
                         journal_entry_id=closing_je.id,
                         account_id=acc_id,
                         description="Closing Entry to zero account",
@@ -198,6 +209,7 @@ class FiscalPeriodService:
 
                 self.session.add(
                     LedgerLine(
+                        org_id=org_id,
                         journal_entry_id=closing_je.id,
                         account_id=retained_earnings_account_id,
                         description="Net Income/Loss transferred to Retained Earnings",

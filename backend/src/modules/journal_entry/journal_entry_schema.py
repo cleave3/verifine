@@ -80,5 +80,5 @@ class JournalEntryRead(BaseModel):
     entry_date: date
     status: JournalEntryStatus
     period_id: int
-    created_by_id: int
+    created_by_id: Optional[int]
     lines: List[LedgerLineRead] = []
