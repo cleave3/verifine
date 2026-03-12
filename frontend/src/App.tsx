@@ -27,6 +27,7 @@ import ExpenseClaims from "./pages/ExpenseClaims";
 import FixedAssets from "./pages/FixedAssets";
 import Items from "./pages/Items";
 import { useCurrencyStore } from "./store/currencyStore";
+import { AiChatPage } from "./modules/ai/components/AiChatPage";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuthStore();
@@ -81,6 +82,7 @@ function App() {
             <Route path="fixed-assets" element={<FixedAssets />} />
             <Route path="items" element={<Items />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="ai" element={<AiChatPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

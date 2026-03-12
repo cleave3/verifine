@@ -22,6 +22,7 @@ from src.modules.payroll.payroll_routes import router as payroll_router
 from src.modules.expense.expense_routes import router as expense_router
 from src.modules.fixed_asset.fixed_asset_routes import router as fixed_asset_router
 from src.modules.item.item_routes import router as item_router
+from src.api.v1.ai import router as ai_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -43,3 +44,4 @@ api_router.include_router(payroll_router)
 api_router.include_router(expense_router)
 api_router.include_router(fixed_asset_router)
 api_router.include_router(item_router)
+api_router.include_router(ai_router, prefix="/ai", tags=["AI"])

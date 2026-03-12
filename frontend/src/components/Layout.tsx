@@ -1,11 +1,12 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon, Menu, X, FileText, Receipt, User as UserIcon, Activity, Tags, Banknote, ReceiptText, Building, Package, ChevronDown, ChevronRight, Briefcase, ShoppingCart, Landmark, UsersRound, Boxes, MonitorDot } from "lucide-react";
+import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon, Menu, X, FileText, Receipt, User as UserIcon, Activity, Tags, Banknote, ReceiptText, Building, Package, ChevronDown, ChevronRight, Briefcase, ShoppingCart, Landmark, UsersRound, Boxes, MonitorDot, Bot } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RoleGuard } from "./RoleGuard";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useConfirmStore } from "../store/confirmStore";
+import { AskVerifineWidget } from "../modules/ai/components/AskVerifineWidget";
 
 interface SidebarSectionProps {
     title: string;
@@ -213,7 +214,12 @@ export default function Layout() {
                             </RoleGuard>
                             <Link to="/settings" onClick={closeMobileMenu} className={linkClass("/settings")}>
                                 <SettingsIcon className={iconClass("/settings")} />
-                                Settings
+                                <span className="mr-auto">Settings</span>
+                            </Link>
+                            <Link to="/ai" onClick={closeMobileMenu} className={linkClass("/ai")}>
+                                <Bot className={iconClass("/ai")} />
+                                <span className="mr-auto">Ask Verifine</span>
+                                <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">AI</span>
                             </Link>
                             <RoleGuard allowedRoles={['admin', 'controller']}>
                                 <Link to="/taxes" onClick={closeMobileMenu} className={linkClass("/taxes")}>
@@ -310,6 +316,8 @@ export default function Layout() {
                 onConfirm={onConfirm}
                 onCancel={onCancel}
             />
+            
+            <AskVerifineWidget />
         </div>
     );
 }

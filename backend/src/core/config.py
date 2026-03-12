@@ -14,5 +14,6 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/verifine"
+    GEMINI_API_KEY: str | None = None
 
 Config = Settings()
