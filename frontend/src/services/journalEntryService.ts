@@ -39,5 +39,9 @@ export const journalEntryService = {
     postJournalEntry: async (id: number) => {
         const response = await api.post(`/journal-entries/${id}/post`);
         return response.data;
+    },
+    updateJournalEntry: async (id: number, data: any) => {
+        const response = await api.put(`/journal-entries/${id}`, data);
+        return response.data;
     }
 };

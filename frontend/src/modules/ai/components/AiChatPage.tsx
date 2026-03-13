@@ -107,6 +107,34 @@ export const AiChatPage: React.FC = () => {
     }
   };
 
+  const formatMessageContent = (content: string) => {
+    // Process line by line for bullet points
+    const lines = content.split('\n');
+    const formattedLines = lines.map(line => {
+      // Replace "* " at the start of a line with a bullet point dot
+      let processedLine = line.trimStart();
+      if (processedLine.startsWith('* ')) {
+        processedLine = '• ' + processedLine.substring(2);
+      }
+
+      // Handle bold formatting: **text** or **{text}**
+      // Using regex to find all instances of **...** and replace with <strong>...</strong>
+      // We'll use dangerouslySetInnerHTML safely by only allowing these specific tags later,
+      // or better, we can map to React elements if we want to be cleaner but simple regex is often easier for this specific requirement.
+      
+      return processedLine;
+    });
+
+    // Handle bold formatting across the entire string now
+    let fullContent = formattedLines.join('\n');
+    
+    // Bold regex: finds **...** and replaces with strong tags
+    // Matches ** followed by any characters (non-greedy) followed by **
+    fullContent = fullContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    return fullContent;
+  };
+
   return (
     <div className="flex h-[calc(100vh-110px)] overflow-hidden bg-white dark:bg-slate-900">
       {/* Sidebar - Threads List */}
@@ -273,7 +301,10 @@ export const AiChatPage: React.FC = () => {
                       : "bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-tl-none"
                       }`}
                   >
-                    <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                    <div 
+                      className="whitespace-pre-wrap leading-relaxed prose-sm dark:prose-invert"
+                      dangerouslySetInnerHTML={{ __html: formatMessageContent(msg.content) }}
+                    />
                   </div>
                 </div>
               </div>

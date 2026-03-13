@@ -118,6 +118,27 @@ export const AskVerifineWidget: React.FC = () => {
     }
   };
 
+  const formatMessageContent = (content: string) => {
+    // Process line by line for bullet points
+    const lines = content.split('\n');
+    const formattedLines = lines.map(line => {
+      // Replace "* " at the start of a line with a bullet point dot
+      let processedLine = line.trimStart();
+      if (processedLine.startsWith('* ')) {
+        processedLine = '• ' + processedLine.substring(2);
+      }
+      return processedLine;
+    });
+
+    // Handle bold formatting across the entire string now
+    let fullContent = formattedLines.join('\n');
+    
+    // Bold regex: finds **...** and replaces with strong tags
+    fullContent = fullContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    return fullContent;
+  };
+
   if (!isFabVisible) return null;
 
   return (
@@ -293,7 +314,10 @@ export const AskVerifineWidget: React.FC = () => {
                               : "bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-bl-none"
                               }`}
                           >
-                            <div className="whitespace-pre-wrap">{msg.content}</div>
+                            <div 
+                              className="whitespace-pre-wrap prose-sm dark:prose-invert"
+                              dangerouslySetInnerHTML={{ __html: formatMessageContent(msg.content) }}
+                            />
                           </div>
                         </div>
                       </div>

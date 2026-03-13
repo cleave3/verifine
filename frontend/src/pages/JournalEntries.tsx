@@ -39,6 +39,8 @@ export default function JournalEntries() {
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedEntry, setSelectedEntry] = useState<any>(null);
+    const [jeToPost, setJeToPost] = useState<any>(null);
+    const [editingEntry, setEditingEntry] = useState<any>(null);
     const [page, setPage] = useState(1);
 
     // Filtering State
@@ -107,9 +109,37 @@ export default function JournalEntries() {
         onSuccess: () => {
             toast.success("Journal entry posted successfully");
             queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
+            setJeToPost(null);
         },
         onError: (err: any) => {
             toast.error(err.response?.data?.detail || "Failed to post journal entry");
+        }
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: async (payload: { id: number, data: JEFormValues }) => {
+            const exchange_rate = activeRates[payload.data.currency_code] || 1.0;
+            const formattedPayload = {
+                description: payload.data.description,
+                entry_date: payload.data.entry_date,
+                period_id: payload.data.period_id,
+                lines: payload.data.lines.map(line => ({
+                    ...line,
+                    currency_code: payload.data.currency_code,
+                    exchange_rate
+                }))
+            };
+            return await journalEntryService.updateJournalEntry(payload.id, formattedPayload);
+        },
+        onSuccess: () => {
+            toast.success("Journal entry updated successfully");
+            queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
+            setIsModalOpen(false);
+            setEditingEntry(null);
+            form.reset();
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to update journal entry");
         }
     });
 
@@ -178,7 +208,20 @@ export default function JournalEntries() {
                         <Download className="w-4 h-4" /> Export CSV
                     </button>
                     <RoleGuard allowedRoles={['admin', 'controller', 'accountant']}>
-                        <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
+                        <button onClick={() => {
+                            setEditingEntry(null);
+                            form.reset({
+                                description: "",
+                                entry_date: new Date().toISOString().split('T')[0],
+                                period_id: 0,
+                                currency_code: baseCurrency || "NGN",
+                                lines: [
+                                    { account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "", tracking_option_id: 0 },
+                                    { account_id: 0, transaction_debit: 0, transaction_credit: 0, description: "", tracking_option_id: 0 }
+                                ]
+                            });
+                            setIsModalOpen(true);
+                        }} className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 transition">
                             + New Entry
                         </button>
                     </RoleGuard>
@@ -281,14 +324,35 @@ export default function JournalEntries() {
                                                 {je.status}
                                             </span>
                                         </td>
-                                        <td className="px-4 sm:px-6 py-4 text-sm flex items-center gap-3 flex-wrap min-w-[120px]">
+                                         <td className="px-4 sm:px-6 py-4 text-sm flex items-center gap-3 flex-wrap min-w-[120px]">
                                             <button onClick={() => setSelectedEntry(je)} className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded">
                                                 View
                                             </button>
                                             {je.status === 'DRAFT' && (
-                                                <button onClick={() => postMutation.mutate(je.id)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-medium bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded">
-                                                    Post
-                                                </button>
+                                                <>
+                                                    <button onClick={() => {
+                                                        setEditingEntry(je);
+                                                        form.reset({
+                                                            description: je.description,
+                                                            entry_date: format(new Date(je.entry_date), 'yyyy-MM-dd'),
+                                                            period_id: je.period_id,
+                                                            currency_code: je.lines?.[0]?.currency_code || baseCurrency,
+                                                            lines: je.lines.map((l: any) => ({
+                                                                account_id: l.account_id,
+                                                                transaction_debit: l.transaction_debit,
+                                                                transaction_credit: l.transaction_credit,
+                                                                description: l.description,
+                                                                tracking_option_id: l.tracking_option_id
+                                                            }))
+                                                        });
+                                                        setIsModalOpen(true);
+                                                    }} className="text-amber-600 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 font-medium bg-amber-50 dark:bg-amber-900/30 px-3 py-1 rounded">
+                                                        Edit
+                                                    </button>
+                                                    <button onClick={() => setJeToPost(je)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-medium bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded">
+                                                        Post
+                                                    </button>
+                                                </>
                                             )}
                                         </td>
                                     </tr>
@@ -360,8 +424,8 @@ export default function JournalEntries() {
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 z-100 flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-slate-800 rounded-xl p-4 sm:p-6 w-full sm:w-[95%] md:max-w-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">New Journal Entry</h2>
-                        <form onSubmit={form.handleSubmit((d: any) => createMutation.mutate(d))} className="space-y-4">
+                        <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">{editingEntry ? 'Edit Journal Entry' : 'New Journal Entry'}</h2>
+                        <form onSubmit={form.handleSubmit((d: any) => editingEntry ? updateMutation.mutate({ id: editingEntry.id, data: d }) : createMutation.mutate(d))} className="space-y-4">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Period</label>
@@ -434,9 +498,9 @@ export default function JournalEntries() {
                             </div>
 
                             <div className="flex justify-end gap-3 mt-6">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Cancel</button>
-                                <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">
-                                    {createMutation.isPending ? "Saving..." : "Save Draft"}
+                                <button type="button" onClick={() => { setIsModalOpen(false); setEditingEntry(null); }} className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Cancel</button>
+                                <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">
+                                    {(createMutation.isPending || updateMutation.isPending) ? "Saving..." : editingEntry ? "Update Draft" : "Save Draft"}
                                 </button>
                             </div>
                         </form>
@@ -513,6 +577,33 @@ export default function JournalEntries() {
                         <div className="flex justify-end mt-6">
                             <button onClick={() => setSelectedEntry(null)} className="px-6 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition">
                                 Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {jeToPost && (
+                <div className="fixed inset-0 bg-black/50 z-100 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-md shadow-2xl">
+                        <h2 className="text-xl font-bold mb-2 text-slate-900 dark:text-white">Confirm Posting</h2>
+                        <p className="text-slate-600 dark:text-slate-300 mb-6">
+                            Are you sure you want to post <strong>{jeToPost.transaction_id}</strong> to the General Ledger? 
+                            This action cannot be undone and will affect your financial reports.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button 
+                                onClick={() => setJeToPost(null)}
+                                className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={() => postMutation.mutate(jeToPost.id)}
+                                disabled={postMutation.isPending}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition disabled:opacity-50"
+                            >
+                                {postMutation.isPending ? "Posting..." : "Confirm & Post"}
                             </button>
                         </div>
                     </div>

@@ -123,7 +123,7 @@ class JournalEntryService:
             entry_date=je_in.entry_date,
             period_id=je_in.period_id,
             created_by_id=user_id,
-            status=JournalEntryStatus.POSTED,
+            status=JournalEntryStatus.DRAFT,
             org_id=org_id,
         )
 
@@ -150,6 +150,94 @@ class JournalEntryService:
         await self.session.commit()
 
         return await self.get_journal_entry_by_id(org_id, db_je.id)
+
+    async def update_journal_entry(
+        self, org_id: uuid.UUID, je_id: int, je_in: JournalEntryCreate, user_id: int
+    ) -> JournalEntry:
+        # 1. Get the existing journal entry
+        je = await self.get_journal_entry_by_id(org_id, je_id)
+        if not je:
+            raise BadRequest("Journal entry not found.")
+
+        # 2. Ensure it's still a draft
+        if je.status != JournalEntryStatus.DRAFT:
+            raise BadRequest(f"Cannot edit a journal entry with status: {je.status}")
+
+        # 3. Validate the new fiscal period
+        stmt = select(FiscalPeriod).where(
+            and_(FiscalPeriod.id == je_in.period_id, FiscalPeriod.org_id == org_id)
+        )
+        period = (await self.session.exec(stmt)).first()
+        if not period:
+            raise BadRequest("Invalid fiscal period specified.")
+
+        if period.status != PeriodStatus.OPEN:
+            raise BadRequest(f"Cannot update to a {period.status} period.")
+
+        if je_in.entry_date < period.start_date or je_in.entry_date > period.end_date:
+            raise BadRequest("Entry date falls outside fiscal period boundaries.")
+
+        # 4. Update Header
+        je.description = je_in.description
+        je.entry_date = je_in.entry_date
+        je.period_id = je_in.period_id
+        # We don't change transaction_id as it was already generated based on original date
+        # unless the month changed significantly, but usually we keep it or regenerate.
+        # For simplicity, if entry_date changed its month, we might want to regenerate?
+        # Let's check if month/year changed and regenerate if so.
+        if je.entry_date.strftime("%Y-%m") != je_in.entry_date.strftime("%Y-%m"):
+            je.transaction_id = await self.generate_transaction_id(org_id, je_in.entry_date)
+
+        self.session.add(je)
+
+        # 5. Handle Lines (Replace existing)
+        # Delete old lines
+        from sqlalchemy import delete
+        await self.session.execute(
+            delete(LedgerLine).where(LedgerLine.journal_entry_id == je.id)
+        )
+
+        # Add new lines
+        for line_in in je_in.lines:
+            db_line = LedgerLine(
+                journal_entry_id=je.id,
+                account_id=line_in.account_id,
+                currency_code=line_in.currency_code,
+                exchange_rate=line_in.exchange_rate,
+                transaction_debit=line_in.transaction_debit,
+                transaction_credit=line_in.transaction_credit,
+                base_debit=line_in.base_debit,
+                base_credit=line_in.base_credit,
+                description=line_in.description,
+                org_id=org_id,
+            )
+            self.session.add(db_line)
+
+        await self.session.commit()
+        return await self.get_journal_entry_by_id(org_id, je.id)
+
+    async def post_journal_entry(self, org_id: uuid.UUID, je_id: int) -> JournalEntry:
+        je = await self.get_journal_entry_by_id(org_id, je_id)
+        if not je:
+            raise BadRequest("Journal entry not found.")
+
+        if je.status != JournalEntryStatus.DRAFT:
+            raise BadRequest(f"Journal entry is already in {je.status} status.")
+
+        # Re-validate the fiscal period
+        stmt = select(FiscalPeriod).where(
+            and_(FiscalPeriod.id == je.period_id, FiscalPeriod.org_id == org_id)
+        )
+        period = (await self.session.exec(stmt)).first()
+        if not period or period.status != PeriodStatus.OPEN:
+            raise BadRequest("Cannot post to a closed or invalid fiscal period.")
+
+        je.status = JournalEntryStatus.POSTED
+        self.session.add(je)
+        await self.session.commit()
+        await self.session.refresh(je)
+
+        return je
 
 
 def get_journal_entry_service(
