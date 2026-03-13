@@ -73,14 +73,14 @@ async def login(
         key="access_token",
         value=access_token,
         httponly=True,
-        max_age=Config.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        max_age=Config.ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # 15 minutes
         samesite="lax",
     )
     res.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        max_age=Config.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        max_age=Config.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,  # 7 days
         samesite="lax",
     )
 

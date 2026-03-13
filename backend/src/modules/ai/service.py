@@ -76,7 +76,7 @@ class AiService:
         history = await self.get_thread_history(thread.id)
 
         # Basic context for now - will be expanded to full SQL agent
-        system_content = f"You are Ask Verifine, a helpful financial RAG agent. You must ONLY answer questions based on the user's financial data. When providing numbers, format them nicely. Be concise and professional.\n\n"
+        system_content = f"You are VeriBot, a helpful financial assistant. You must ONLY answer questions based on the user's financial data. When providing numbers, format them nicely. Be concise and professional.\n\n"
 
         from langgraph.prebuilt import create_react_agent
         from .tools import get_financial_tools
@@ -191,15 +191,15 @@ class AiService:
         if not thread:
             return False
 
-        # Cascade delete is usually handled by DB relationships, 
-        # but to be safe we can delete messages first if no cascade is set up, 
+        # Cascade delete is usually handled by DB relationships,
+        # but to be safe we can delete messages first if no cascade is set up,
         # or just delete the thread. Assuming AI messages have a cascade or we delete manually.
         msg_statement = select(AiMessage).where(AiMessage.thread_id == thread_id)
         msg_result = await self.db.exec(msg_statement)
         messages = msg_result.all()
         for msg in messages:
             await self.db.delete(msg)
-            
+
         await self.db.delete(thread)
         await self.db.commit()
         return True

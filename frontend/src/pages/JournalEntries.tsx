@@ -71,7 +71,7 @@ export default function JournalEntries() {
     const { data: trackingRes } = useQuery({ queryKey: ["tracking-categories"], queryFn: trackingService.getCategories });
 
     const entries = jeRes?.data?.results || [];
-    const pageInfo = jeRes?.data?.meta || { current_page: 1, page_count: 1, total_count: 0, is_first_page: true, is_last_page: true };
+    const pageInfo = jeRes?.data?.page_info || { current_page: 1, page_count: 1, total_count: 0, is_first_page: true, is_last_page: true };
     const accounts = accRes?.data || [];
     const periods = perRes?.data?.filter((p: any) => p.status === "OPEN") || [];
     const trackingCategories = trackingRes?.data || trackingRes || [];

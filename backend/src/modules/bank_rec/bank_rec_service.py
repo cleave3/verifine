@@ -27,6 +27,15 @@ class BankRecService:
 
         return result.all()
 
+    async def get_statement_dict(self, statement_id: int):
+        st = await self.session.exec(
+            select(BankStatement).where(BankStatement.id == statement_id)
+        )
+        st = st.first()
+        if not st or st.org_id != self.current_user.org_id:
+            raise HTTPException(status_code=404, detail="Statement not found")
+        return st.__dict__
+
     async def get_statement(self, statement_id: int):
         st = await self.session.get(BankStatement, statement_id)
         if not st or st.org_id != self.current_user.org_id:
@@ -59,11 +68,11 @@ class BankRecService:
 
     async def suggest_matches(self, statement_id: int):
         st = await self.get_statement(statement_id)
-        # from sqlalchemy.orm import selectinload
+        from sqlalchemy.orm import selectinload
 
         acc_query = (
             select(LedgerLine)
-            # .options(selectinload(LedgerLine.journal_entry))
+            .options(selectinload(LedgerLine.journal_entry))
             .where(
                 LedgerLine.org_id == self.current_user.org_id,
                 LedgerLine.account_id == st.account_id,

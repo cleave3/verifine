@@ -24,7 +24,7 @@ class BankStatement(BankStatementBase, table=True):
     # Relationships
     lines: List["BankStatementLine"] = Relationship(
         back_populates="statement",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "lazy": "selectin"},
     )
 
 

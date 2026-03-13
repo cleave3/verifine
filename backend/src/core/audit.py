@@ -1,5 +1,4 @@
-from functools import wraps
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 import uuid
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.models.audit import AuditLog

@@ -44,7 +44,7 @@ async def upload_statement(
 async def get_statement(
     statement_id: int, service: BankRecService = Depends(get_bank_rec_service)
 ):
-    data = await service.get_statement(statement_id)
+    data = await service.get_statement_dict(statement_id)
     return response(200, "Bank statement retrieved successfully", data)
 
 

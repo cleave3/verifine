@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon, Menu, X, FileText, Receipt, User as UserIcon, Activity, Tags, Banknote, ReceiptText, Building, Package, ChevronDown, ChevronRight, Briefcase, ShoppingCart, Landmark, UsersRound, Boxes, MonitorDot, Bot } from "lucide-react";
+import { LogOut, BookOpen, Calendar, LayoutDashboard, Users, BarChart3, Moon, Sun, Settings as SettingsIcon, Menu, X, FileText, Receipt, User as UserIcon, Activity, Tags, Banknote, ReceiptText, Building, Package, ChevronDown, ChevronRight, Briefcase, ShoppingCart, Landmark, UsersRound, Boxes, MonitorDot } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RoleGuard } from "./RoleGuard";
@@ -216,11 +216,11 @@ export default function Layout() {
                                 <SettingsIcon className={iconClass("/settings")} />
                                 <span className="mr-auto">Settings</span>
                             </Link>
-                            <Link to="/ai" onClick={closeMobileMenu} className={linkClass("/ai")}>
+                            {/* <Link to="/ai" onClick={closeMobileMenu} className={linkClass("/ai")}>
                                 <Bot className={iconClass("/ai")} />
                                 <span className="mr-auto">Ask Verifine</span>
                                 <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">AI</span>
-                            </Link>
+                            </Link> */}
                             <RoleGuard allowedRoles={['admin', 'controller']}>
                                 <Link to="/taxes" onClick={closeMobileMenu} className={linkClass("/taxes")}>
                                     <Receipt className={iconClass("/taxes")} />
@@ -310,13 +310,13 @@ export default function Layout() {
                 </button>
             </nav>
 
-            <ConfirmDialog 
+            <ConfirmDialog
                 isOpen={isOpen}
                 {...options}
                 onConfirm={onConfirm}
                 onCancel={onCancel}
             />
-            
+
             <AskVerifineWidget />
         </div>
     );
