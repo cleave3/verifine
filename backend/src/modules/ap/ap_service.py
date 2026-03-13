@@ -13,6 +13,7 @@ from src.models.vendor import Vendor
 from src.models.bill import Bill, BillLineItem, BillStatus
 from src.models.account import Account
 from src.models.tax import TaxRate
+from src.models.organization import Organization
 from src.models.fiscal_period import FiscalPeriod, PeriodStatus
 from src.models.item import Item, ItemType
 from src.modules.ap.ap_schema import VendorCreate, VendorUpdate, BillCreate, BillUpdate
@@ -276,6 +277,12 @@ class BillService:
         if db_bill.status != BillStatus.APPROVED:
             raise BadRequest("Only APPROVED bills can be posted to the general ledger.")
 
+        # Get Organization for Tax Regime
+        stmt_org = select(Organization).where(Organization.id == org_id)
+        org = (await self.session.exec(stmt_org)).first()
+        if not org:
+            raise BadRequest("Organization not found")
+
         # 1. Find AP Account
         stmt = select(Account).where(
             and_(Account.code == "2000", Account.org_id == org_id)
@@ -344,15 +351,49 @@ class BillService:
                         f"Inventory Asset Purchase: {item.name}"
                     )
 
+        # Calculate WHT for Nigeria Regime
+        total_wht = 0.0
+        base_total_wht = 0.0
+        if org.tax_regime == "NIGERIA_NTA_2026":
+            # For each line, if it's a service, deduct WHT (simplified to 5% if individual, 10% if corp)
+            # For simplicity, we'll check if any tax rate is marked as WHT or if we're in Nigeria mode
+            # We'll use a placeholder account 2110 for WHT Payable if found
+            stmt_wht = select(Account).where(and_(Account.code == "2110", Account.org_id == org_id))
+            wht_payable_act = (await self.session.exec(stmt_wht)).first()
+            
+            if wht_payable_act:
+                for line in db_bill.lines:
+                    # In a real app, we'd check item type or vendor type
+                    # Here we sum it up
+                    # Placeholder: 5% WHT on net amount for all lines if Nigeria mode
+                    line_wht = round(line.amount * 0.05, 4)
+                    base_line_wht = round(line.base_amount * 0.05, 4)
+                    total_wht += line_wht
+                    base_total_wht += base_line_wht
+                
+                if total_wht > 0:
+                    ledger_lines.append(
+                        LedgerLineCreate(
+                            account_id=wht_payable_act.id,
+                            currency_code=db_bill.currency_code,
+                            exchange_rate=db_bill.exchange_rate,
+                            transaction_debit=0.0,
+                            transaction_credit=total_wht,
+                            base_debit=0.0,
+                            base_credit=base_total_wht,
+                            description=f"WHT Deduction - {db_bill.bill_number}",
+                        )
+                    )
+
         ledger_lines.append(
             LedgerLineCreate(
                 account_id=ap_act.id,
                 currency_code=db_bill.currency_code,
                 exchange_rate=db_bill.exchange_rate,
                 transaction_debit=0.0,
-                transaction_credit=db_bill.total_amount,
+                transaction_credit=db_bill.total_amount - total_wht,
                 base_debit=0.0,
-                base_credit=db_bill.base_total_amount,
+                base_credit=db_bill.base_total_amount - base_total_wht,
                 description=f"Bill Output - {db_bill.bill_number}",
             )
         )

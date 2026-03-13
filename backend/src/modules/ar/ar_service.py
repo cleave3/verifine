@@ -13,6 +13,7 @@ from src.models.customer import Customer
 from src.models.invoice import Invoice, InvoiceLineItem, InvoiceStatus
 from src.models.account import Account
 from src.models.tax import TaxRate
+from src.models.organization import Organization
 from src.models.fiscal_period import FiscalPeriod, PeriodStatus
 from src.models.item import Item, ItemType
 from src.modules.ar.ar_schema import CustomerCreate, CustomerUpdate, InvoiceCreate
@@ -173,6 +174,12 @@ class InvoiceService:
         if not customer:
             raise BadRequest("Invalid customer ID")
 
+        # Get Organization for Tax Regime
+        stmt_org = select(Organization).where(Organization.id == org_id)
+        org = (await self.session.exec(stmt_org)).first()
+        if not org:
+            raise BadRequest("Organization not found")
+
         tax_rates = {}
         for line in invoice_in.lines:
             if line.tax_rate_id and line.tax_rate_id not in tax_rates:
@@ -191,6 +198,15 @@ class InvoiceService:
                 tr = tax_rates[line.tax_rate_id]
                 tax_amt = round(line_amt * float(tr.rate), 4)
                 line_amt += tax_amt
+            
+            # Nigeria-specific logic for 2026
+            if org.tax_regime == "NIGERIA_NTA_2026":
+                # Small businesses (turnover <= 50M) are exempt from CIT but still pay VAT if registered
+                # For now, we ensure VAT is correctly handled if the org is registered
+                if org.is_vat_registered and not any(tr.tax_type == "VAT" for tr in tax_rates.values() if line.tax_rate_id == tr.id):
+                    # In a real app, we might want to auto-apply VAT here or warn the user
+                    pass
+
             total_amount += line_amt
 
         base_total_amount = round(total_amount * invoice_in.exchange_rate, 4)

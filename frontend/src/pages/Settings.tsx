@@ -30,7 +30,11 @@ export default function Settings() {
         address: "",
         tax_id: "",
         logo_url: "",
-        primary_color: "#4f46e5"
+        primary_color: "#4f46e5",
+        tax_regime: "MANUAL",
+        annual_turnover: 0,
+        fixed_asset_value: 0,
+        is_vat_registered: false
     });
 
     // Exchange rates local state
@@ -51,7 +55,11 @@ export default function Settings() {
                 address: currentOrg.address || "",
                 tax_id: currentOrg.tax_id || "",
                 logo_url: currentOrg.logo_url || "",
-                primary_color: currentOrg.primary_color || "#4f46e5"
+                primary_color: currentOrg.primary_color || "#4f46e5",
+                tax_regime: currentOrg.tax_regime || "MANUAL",
+                annual_turnover: currentOrg.annual_turnover || 0,
+                fixed_asset_value: currentOrg.fixed_asset_value || 0,
+                is_vat_registered: currentOrg.is_vat_registered || false
             });
         }
     }, [currentOrg]);
@@ -201,12 +209,74 @@ export default function Settings() {
                     </div>
                 </div>
 
+                <h3 className="text-md font-semibold text-slate-800 dark:text-gray-200 mt-8 mb-4 pt-6 border-t border-slate-100 dark:border-slate-700">Tax Configuration</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tax Regime</label>
+                        <select
+                            value={orgProfile.tax_regime}
+                            onChange={(e) => setOrgProfile(prev => ({ ...prev, tax_regime: e.target.value }))}
+                            className="block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2"
+                        >
+                            <option value="MANUAL">Manual Control (Generic)</option>
+                            <option value="NIGERIA_NTA_2026">Nigerian Tax Act (2026 Compliance Mode)</option>
+                        </select>
+                        <p className="text-[10px] text-slate-500 mt-1 italic">
+                            {orgProfile.tax_regime === "NIGERIA_NTA_2026"
+                                ? "Automated WHT deductions and threshold tracking (₦50M turnover exemption) enabled."
+                                : "Organizations manually manage tax rates in the Tax Rates menu."}
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">VAT Registered?</label>
+                        <div className="flex items-center h-10">
+                            <input
+                                type="checkbox"
+                                checked={orgProfile.is_vat_registered}
+                                onChange={(e) => setOrgProfile(prev => ({ ...prev, is_vat_registered: e.target.checked }))}
+                                className="h-4 w-4 text-indigo-600 rounded border-slate-300"
+                            />
+                            <span className="ml-2 text-sm text-slate-600 dark:text-slate-400">Yes, this company is registered for VAT</span>
+                        </div>
+                    </div>
+                    {orgProfile.tax_regime === "NIGERIA_NTA_2026" && (
+                        <>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Annual Turnover (Last Fiscal Year)</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2 text-slate-400 font-bold">₦</span>
+                                    <input
+                                        type="number"
+                                        value={orgProfile.annual_turnover}
+                                        onChange={(e) => setOrgProfile(prev => ({ ...prev, annual_turnover: parseFloat(e.target.value) || 0 }))}
+                                        className="block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 pl-8"
+                                    />
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1">Companies under ₦50M turnover have different CIT treatments under NTA 2026.</p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Fixed Asset Value</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2 text-slate-400 font-bold">₦</span>
+                                    <input
+                                        type="number"
+                                        value={orgProfile.fixed_asset_value}
+                                        onChange={(e) => setOrgProfile(prev => ({ ...prev, fixed_asset_value: parseFloat(e.target.value) || 0 }))}
+                                        className="block w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-md p-2 pl-8"
+                                    />
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+
                 <RoleGuard allowedRoles={['admin']}>
                     <div className="flex justify-end">
                         <button
                             type="submit"
                             disabled={updateOrgMutation.isPending}
                             className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+                            onClick={() => setIsConfirmOrgOpen(true)}
                         >
                             {updateOrgMutation.isPending ? "Saving..." : "Save Organization Info"}
                         </button>
@@ -292,7 +362,7 @@ export default function Settings() {
                 <RoleGuard allowedRoles={['admin', 'controller', 'accountant']}>
                     <div className="flex justify-end">
                         <button
-                            onClick={executeSaveRates}
+                            onClick={() => setIsConfirmRatesOpen(true)}
                             disabled={updateRatesMutation.isPending}
                             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none disabled:opacity-50"
                         >

@@ -9,6 +9,9 @@ class TaxRateBase(BaseModel):
     account_id: int
     is_active: bool = True
     description: Optional[str] = None
+    tax_type: str = "VAT"
+    is_recoverable: bool = False
+    scope: str = "BOTH"
 
 
 class TaxRateCreate(TaxRateBase):
@@ -21,6 +24,9 @@ class TaxRateUpdate(BaseModel):
     account_id: Optional[int] = None
     is_active: Optional[bool] = None
     description: Optional[str] = None
+    tax_type: Optional[str] = None
+    is_recoverable: Optional[bool] = None
+    scope: Optional[str] = None
 
 
 class TaxRateRead(TaxRateBase):

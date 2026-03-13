@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import Optional
 import uuid
+import sqlalchemy as sa
 from sqlmodel import SQLModel, Field, Relationship
 
 
@@ -19,3 +20,17 @@ class TaxRate(SQLModel, table=True):
     )
     is_active: bool = Field(default=True)
     description: Optional[str] = None
+
+    # Advanced Tax Features
+    tax_type: str = Field(
+        description="VAT, WHT, CIT, etc.",
+        sa_column=sa.Column(sa.String(), nullable=False, server_default="VAT"),
+    )
+    is_recoverable: bool = Field(
+        description="True for input VAT",
+        sa_column=sa.Column(sa.Boolean(), nullable=False, server_default="false"),
+    )
+    scope: str = Field(
+        description="INPUT, OUTPUT, or BOTH",
+        sa_column=sa.Column(sa.String(), nullable=False, server_default="BOTH"),
+    )

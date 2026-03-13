@@ -10,6 +10,10 @@ interface Organization {
     primary_color: string | null;
     address: string | null;
     tax_id: string | null;
+    tax_regime: string;
+    annual_turnover: number;
+    fixed_asset_value: number;
+    is_vat_registered: boolean;
 }
 
 interface User {
