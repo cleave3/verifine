@@ -240,6 +240,64 @@ class JournalEntryService:
         return je
 
 
+    async def get_account_entries(
+        self,
+        org_id: uuid.UUID,
+        account_id: int,
+        page: int = 1,
+        page_size: int = 10,
+        status: Optional[JournalEntryStatus] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ):
+        statement = (
+            select(LedgerLine, JournalEntry)
+            .join(JournalEntry, LedgerLine.journal_entry_id == JournalEntry.id)
+            .where(LedgerLine.org_id == org_id)
+            .where(LedgerLine.account_id == account_id)
+            .order_by(JournalEntry.entry_date.desc(), JournalEntry.id.desc())
+        )
+
+        total_statement = (
+            select(func.count(LedgerLine.id))
+            .join(JournalEntry, LedgerLine.journal_entry_id == JournalEntry.id)
+            .where(LedgerLine.org_id == org_id)
+            .where(LedgerLine.account_id == account_id)
+        )
+
+        if status:
+            statement = statement.where(JournalEntry.status == status)
+            total_statement = total_statement.where(JournalEntry.status == status)
+
+        if start_date:
+            statement = statement.where(JournalEntry.entry_date >= start_date)
+            total_statement = total_statement.where(JournalEntry.entry_date >= start_date)
+
+        if end_date:
+            statement = statement.where(JournalEntry.entry_date <= end_date)
+            total_statement = total_statement.where(JournalEntry.entry_date <= end_date)
+
+        statement = statement.offset((page - 1) * page_size).limit(page_size)
+
+        results = await self.session.exec(statement)
+        total_result = await self.session.exec(total_statement)
+        total_records = total_result.first()
+
+        entries = []
+        for line, je in results:
+            entry_dict = line.model_dump()
+            entry_dict["transaction_id"] = je.transaction_id
+            entry_dict["entry_date"] = je.entry_date
+            entry_dict["header_description"] = je.description
+            entry_dict["status"] = je.status
+            entries.append(entry_dict)
+
+        return {
+            "results": entries,
+            "meta": get_pagination_meta(page, page_size, total_records),
+        }
+
+
 def get_journal_entry_service(
     session: AsyncSession = Depends(get_session),
 ) -> JournalEntryService:

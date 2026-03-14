@@ -28,6 +28,7 @@ import FixedAssets from "./pages/FixedAssets";
 import Items from "./pages/Items";
 import { useCurrencyStore } from "./store/currencyStore";
 import { AiChatPage } from "./modules/ai/components/AiChatPage";
+import AccountEntries from "./pages/AccountEntries";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuthStore();
@@ -63,6 +64,7 @@ function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="accounts" element={<Accounts />} />
+            <Route path="accounts/:id/entries" element={<AccountEntries />} />
             <Route path="periods" element={<FiscalPeriods />} />
             <Route path="journal-entries" element={<JournalEntries />} />
             <Route path="ap/vendors" element={<Vendors />} />

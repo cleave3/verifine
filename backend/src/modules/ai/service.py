@@ -64,7 +64,7 @@ class AiService:
         thread_id: uuid.UUID | None = None,
     ) -> MessageResponse:
         thread = await self.get_or_create_thread(
-            org_id, user_id, thread_id, title=message[:20]
+            org_id, user_id, thread_id, title=message[:25]
         )
 
         # Save user message

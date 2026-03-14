@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { Link } from "react-router-dom";
 import { accountService } from "../services/accountService";
 import { RoleGuard } from "../components/RoleGuard";
 
@@ -78,8 +79,16 @@ export default function Accounts() {
                         <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
                             {accounts.map((account: any) => (
                                 <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">{account.code}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{account.name}</td>
+                                    <td className="px-6 py-4 text-sm font-medium">
+                                        <Link to={`/accounts/${account.id}/entries`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                                            {account.code}
+                                        </Link>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                                        <Link to={`/accounts/${account.id}/entries`} className="hover:text-indigo-600 dark:hover:text-indigo-400">
+                                            {account.name}
+                                        </Link>
+                                    </td>
                                     <td className="px-6 py-4 text-sm">
                                         <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-400">
                                             {account.type}

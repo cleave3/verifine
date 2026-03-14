@@ -16,5 +16,10 @@ export const accountService = {
     createAccount: async (payload: CreateAccountPayload) => {
         const response = await api.post("/accounts/", payload);
         return response.data;
+    },
+
+    getAccountEntries: async (id: number, params: any) => {
+        const response = await api.get(`/accounts/${id}/entries`, { params });
+        return response.data;
     }
 };

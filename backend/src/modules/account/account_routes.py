@@ -9,6 +9,13 @@ from src.modules.account.account_schema import AccountCreate, AccountUpdate
 from src.modules.account.account_service import AccountService, get_account_service
 from src.core.security_roles import get_current_user
 from src.models.user import User
+from src.models.journal_entry import JournalEntryStatus
+from src.modules.journal_entry.journal_entry_service import (
+    JournalEntryService,
+    get_journal_entry_service,
+)
+from datetime import date
+from typing import Optional
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -54,3 +61,26 @@ async def update_account(
         raise BadRequest("Account not found")
 
     return response(200, "Account updated successfully", updated.model_dump())
+
+
+@router.get("/{id}/entries")
+async def get_account_entries(
+    id: int,
+    page: int = 1,
+    page_size: int = 10,
+    status: Optional[JournalEntryStatus] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    je_service: JournalEntryService = Depends(get_journal_entry_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+):
+    entries = await je_service.get_account_entries(
+        org_id=org_id,
+        account_id=id,
+        page=page,
+        page_size=page_size,
+        status=status,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return response(200, "Account entries retrieved successfully", entries)
