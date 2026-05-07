@@ -5,6 +5,7 @@ from datetime import date, datetime
 from typing import List, Optional
 from fastapi import HTTPException
 
+from src.models.journal_entry import JournalEntryStatus
 from src.models.payroll import PayrollRun, PaySlip, Employee, RunStatus
 from src.models.settings import PayrollSettings
 from src.modules.payroll.payroll_schema import PayrollSettingsUpdate
@@ -237,7 +238,10 @@ class PayrollService:
 
         journal_service = JournalEntryService(self.session)
         journal_entry = await journal_service.create_journal_entry(
-            org_id=org_id, je_in=je_create, user_id=user_id
+            org_id=org_id,
+            je_in=je_create,
+            user_id=user_id,
+            status=JournalEntryStatus.POSTED,
         )
 
         run.journal_entry_id = journal_entry.id

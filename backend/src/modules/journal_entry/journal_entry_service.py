@@ -93,7 +93,11 @@ class JournalEntryService:
         return f"{prefix}{next_num:04d}"
 
     async def create_journal_entry(
-        self, org_id: uuid.UUID, je_in: JournalEntryCreate, user_id: int
+        self,
+        org_id: uuid.UUID,
+        je_in: JournalEntryCreate,
+        user_id: int,
+        status=JournalEntryStatus.DRAFT,
     ) -> JournalEntry:
         # 1. Validate the fiscal period
         stmt = select(FiscalPeriod).where(
@@ -123,7 +127,7 @@ class JournalEntryService:
             entry_date=je_in.entry_date,
             period_id=je_in.period_id,
             created_by_id=user_id,
-            status=JournalEntryStatus.DRAFT,
+            status=status,
             org_id=org_id,
         )
 
@@ -163,6 +167,7 @@ class JournalEntryService:
         if je.status != JournalEntryStatus.DRAFT:
             raise BadRequest(f"Cannot edit a journal entry with status: {je.status}")
 
+        prev_state = je.model_dump()
         # 3. Validate the new fiscal period
         stmt = select(FiscalPeriod).where(
             and_(FiscalPeriod.id == je_in.period_id, FiscalPeriod.org_id == org_id)
@@ -186,13 +191,16 @@ class JournalEntryService:
         # For simplicity, if entry_date changed its month, we might want to regenerate?
         # Let's check if month/year changed and regenerate if so.
         if je.entry_date.strftime("%Y-%m") != je_in.entry_date.strftime("%Y-%m"):
-            je.transaction_id = await self.generate_transaction_id(org_id, je_in.entry_date)
+            je.transaction_id = await self.generate_transaction_id(
+                org_id, je_in.entry_date
+            )
 
         self.session.add(je)
 
         # 5. Handle Lines (Replace existing)
         # Delete old lines
         from sqlalchemy import delete
+
         await self.session.execute(
             delete(LedgerLine).where(LedgerLine.journal_entry_id == je.id)
         )
@@ -214,7 +222,8 @@ class JournalEntryService:
             self.session.add(db_line)
 
         await self.session.commit()
-        return await self.get_journal_entry_by_id(org_id, je.id)
+        await self.session.refresh(je)
+        return await self.get_journal_entry_by_id(org_id, je.id), prev_state
 
     async def post_journal_entry(self, org_id: uuid.UUID, je_id: int) -> JournalEntry:
         je = await self.get_journal_entry_by_id(org_id, je_id)
@@ -239,6 +248,20 @@ class JournalEntryService:
 
         return je
 
+    async def void_journal_entry(self, org_id: uuid.UUID, je_id: int) -> JournalEntry:
+        je = await self.get_journal_entry_by_id(org_id, je_id)
+        if not je:
+            raise BadRequest("Journal entry not found.")
+
+        if je.status != JournalEntryStatus.DRAFT:
+            raise BadRequest(f"Only DRAFT journal entries can be voided.")
+
+        je.status = JournalEntryStatus.VOIDED
+        self.session.add(je)
+        await self.session.commit()
+        await self.session.refresh(je)
+
+        return je
 
     async def get_account_entries(
         self,
@@ -271,7 +294,9 @@ class JournalEntryService:
 
         if start_date:
             statement = statement.where(JournalEntry.entry_date >= start_date)
-            total_statement = total_statement.where(JournalEntry.entry_date >= start_date)
+            total_statement = total_statement.where(
+                JournalEntry.entry_date >= start_date
+            )
 
         if end_date:
             statement = statement.where(JournalEntry.entry_date <= end_date)

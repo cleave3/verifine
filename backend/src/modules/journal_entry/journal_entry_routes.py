@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
-from jose import jwt, JWTError
+from src.core.audit import log_audit_event
 from src.core.tenant import get_current_org
 
 from src.core.database import get_session
@@ -67,7 +67,6 @@ async def create_journal_entry(
     ),
     session: AsyncSession = Depends(get_session),
 ):
-    from src.core.audit import log_audit_event
 
     entry = await je_service.create_journal_entry(org_id, je_in, current_user.id)
 
@@ -82,6 +81,7 @@ async def create_journal_entry(
         action="CREATE_JOURNAL_ENTRY_DRAFT",
         entity_type="JournalEntry",
         entity_id=str(entry.id),
+        previous_state=None,
         new_state=je_dict,
         ip_address=client_ip,
     )
@@ -101,7 +101,6 @@ async def post_journal_entry(
     ),
     session: AsyncSession = Depends(get_session),
 ):
-    from src.core.audit import log_audit_event
 
     entry = await je_service.post_journal_entry(org_id, je_id)
 
@@ -116,6 +115,7 @@ async def post_journal_entry(
         action="POST_JOURNAL_ENTRY",
         entity_type="JournalEntry",
         entity_id=str(entry.id),
+        previous_state={**je_dict, "status": "DRAFT"},
         new_state=je_dict,
         ip_address=client_ip,
     )
@@ -136,9 +136,10 @@ async def update_journal_entry(
     ),
     session: AsyncSession = Depends(get_session),
 ):
-    from src.core.audit import log_audit_event
 
-    entry = await je_service.update_journal_entry(org_id, je_id, je_in, current_user.id)
+    (entry, prev_state) = await je_service.update_journal_entry(
+        org_id, je_id, je_in, current_user.id
+    )
 
     je_dict = entry.model_dump()
     je_dict["lines"] = [line.model_dump() for line in entry.lines]
@@ -151,9 +152,44 @@ async def update_journal_entry(
         action="UPDATE_JOURNAL_ENTRY_DRAFT",
         entity_type="JournalEntry",
         entity_id=str(entry.id),
+        previous_state=prev_state,
         new_state=je_dict,
         ip_address=client_ip,
     )
     await session.commit()
 
     return response(200, "Journal entry draft updated", je_dict)
+
+
+@router.post("/{je_id}/void")
+async def void_journal_entry(
+    je_id: int,
+    request: Request,
+    je_service: JournalEntryService = Depends(get_journal_entry_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(
+        role_required([UserRole.ADMIN, UserRole.CONTROLLER, UserRole.ACCOUNTANT])
+    ),
+    session: AsyncSession = Depends(get_session),
+):
+
+    entry = await je_service.void_journal_entry(org_id, je_id)
+
+    je_dict = entry.model_dump()
+    je_dict["lines"] = [line.model_dump() for line in entry.lines]
+
+    client_ip = request.client.host if request.client else None
+    await log_audit_event(
+        session=session,
+        org_id=org_id,
+        user_id=current_user.id,
+        action="VOID_JOURNAL_ENTRY",
+        entity_type="JournalEntry",
+        entity_id=str(entry.id),
+        previous_state={**je_dict, "status": "DRAFT"},
+        new_state=je_dict,
+        ip_address=client_ip,
+    )
+    await session.commit()
+
+    return response(200, "Journal entry voided successfully", je_dict)

@@ -7,8 +7,8 @@ from src.core.tenant import get_current_org
 from src.utils.common import response
 from src.modules.account.account_schema import AccountCreate, AccountUpdate
 from src.modules.account.account_service import AccountService, get_account_service
-from src.core.security_roles import get_current_user
-from src.models.user import User
+from src.core.security_roles import get_current_user, role_required
+from src.models.user import User, UserRole
 from src.models.journal_entry import JournalEntryStatus
 from src.modules.journal_entry.journal_entry_service import (
     JournalEntryService,
@@ -61,6 +61,38 @@ async def update_account(
         raise BadRequest("Account not found")
 
     return response(200, "Account updated successfully", updated.model_dump())
+
+
+@router.post("/{id}/activate")
+async def activate_account(
+    id: int,
+    account_service: AccountService = Depends(get_account_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(
+        role_required([UserRole.ADMIN, UserRole.ACCOUNTANT])
+    ),
+):
+    updated = await account_service.activate_account(org_id, id, current_user.id)
+    if not updated:
+        raise BadRequest("Account not found")
+
+    return response(200, "Account activated successfully", updated.model_dump())
+
+
+@router.post("/{id}/deactivate")
+async def deactivate_account(
+    id: int,
+    account_service: AccountService = Depends(get_account_service),
+    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: User = Depends(
+        role_required([UserRole.ADMIN, UserRole.ACCOUNTANT])
+    ),
+):
+    updated = await account_service.deactivate_account(org_id, id, current_user.id)
+    if not updated:
+        raise BadRequest("Account not found")
+
+    return response(200, "Account deactivated successfully", updated.model_dump())
 
 
 @router.get("/{id}/entries")

@@ -21,5 +21,13 @@ export const accountService = {
     getAccountEntries: async (id: number, params: any) => {
         const response = await api.get(`/accounts/${id}/entries`, { params });
         return response.data;
+    },
+    activateAccount: async (id: number) => {
+        const response = await api.post(`/accounts/${id}/activate`);
+        return response.data;
+    },
+    deactivateAccount: async (id: number) => {
+        const response = await api.post(`/accounts/${id}/deactivate`);
+        return response.data;
     }
 };

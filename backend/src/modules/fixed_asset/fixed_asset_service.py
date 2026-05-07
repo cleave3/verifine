@@ -12,6 +12,8 @@ from src.modules.journal_entry.journal_entry_schema import (
     JournalEntryCreate,
     LedgerLineCreate,
 )
+
+from src.models.journal_entry import JournalEntryStatus
 from src.modules.fixed_asset.fixed_asset_schema import (
     FixedAssetCreate,
     DepreciationRunCreate,
@@ -137,7 +139,10 @@ class FixedAssetService:
 
         journal_service = JournalEntryService(self.session)
         journal_entry = await journal_service.create_journal_entry(
-            org_id=org_id, je_in=je_create, user_id=user_id
+            org_id=org_id,
+            je_in=je_create,
+            user_id=user_id,
+            status=JournalEntryStatus.POSTED,
         )
 
         # 4. Save Depreciation Schedules

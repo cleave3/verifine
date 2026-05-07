@@ -21,6 +21,8 @@ from src.modules.journal_entry.journal_entry_schema import (
     JournalEntryCreate,
     LedgerLineCreate,
 )
+
+from src.models.journal_entry import JournalEntryStatus
 from src.modules.journal_entry.journal_entry_service import JournalEntryService
 from src.core.errors import BadRequest
 from src.core.audit import log_audit_event
@@ -198,12 +200,16 @@ class InvoiceService:
                 tr = tax_rates[line.tax_rate_id]
                 tax_amt = round(line_amt * float(tr.rate), 4)
                 line_amt += tax_amt
-            
+
             # Nigeria-specific logic for 2026
             if org.tax_regime == "NIGERIA_NTA_2026":
                 # Small businesses (turnover <= 50M) are exempt from CIT but still pay VAT if registered
                 # For now, we ensure VAT is correctly handled if the org is registered
-                if org.is_vat_registered and not any(tr.tax_type == "VAT" for tr in tax_rates.values() if line.tax_rate_id == tr.id):
+                if org.is_vat_registered and not any(
+                    tr.tax_type == "VAT"
+                    for tr in tax_rates.values()
+                    if line.tax_rate_id == tr.id
+                ):
                     # In a real app, we might want to auto-apply VAT here or warn the user
                     pass
 
@@ -424,7 +430,9 @@ class InvoiceService:
         )
 
         je_service = JournalEntryService(self.session)
-        je = await je_service.create_journal_entry(org_id, je_create, user_id)
+        je = await je_service.create_journal_entry(
+            org_id, je_create, user_id, status=JournalEntryStatus.POSTED
+        )
 
         # 5. Link and Update Invoice Status
         prev_state = db_invoice.model_dump()

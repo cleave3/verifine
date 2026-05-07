@@ -17,6 +17,8 @@ from src.models.organization import Organization
 from src.models.fiscal_period import FiscalPeriod, PeriodStatus
 from src.models.item import Item, ItemType
 from src.modules.ap.ap_schema import VendorCreate, VendorUpdate, BillCreate, BillUpdate
+
+from src.models.journal_entry import JournalEntryStatus
 from src.modules.journal_entry.journal_entry_schema import (
     JournalEntryCreate,
     LedgerLineCreate,
@@ -358,9 +360,11 @@ class BillService:
             # For each line, if it's a service, deduct WHT (simplified to 5% if individual, 10% if corp)
             # For simplicity, we'll check if any tax rate is marked as WHT or if we're in Nigeria mode
             # We'll use a placeholder account 2110 for WHT Payable if found
-            stmt_wht = select(Account).where(and_(Account.code == "2110", Account.org_id == org_id))
+            stmt_wht = select(Account).where(
+                and_(Account.code == "2110", Account.org_id == org_id)
+            )
             wht_payable_act = (await self.session.exec(stmt_wht)).first()
-            
+
             if wht_payable_act:
                 for line in db_bill.lines:
                     # In a real app, we'd check item type or vendor type
@@ -370,7 +374,7 @@ class BillService:
                     base_line_wht = round(line.base_amount * 0.05, 4)
                     total_wht += line_wht
                     base_total_wht += base_line_wht
-                
+
                 if total_wht > 0:
                     ledger_lines.append(
                         LedgerLineCreate(
@@ -407,7 +411,9 @@ class BillService:
         )
 
         je_service = JournalEntryService(self.session)
-        je = await je_service.create_journal_entry(org_id, je_create, user_id)
+        je = await je_service.create_journal_entry(
+            org_id, je_create, user_id, status=JournalEntryStatus.POSTED
+        )
 
         prev_state = db_bill.model_dump()
         db_bill.journal_entry_id = je.id

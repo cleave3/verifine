@@ -105,6 +105,68 @@ class AccountService:
 
         return db_account
 
+    async def activate_account(
+        self, org_id: uuid.UUID, account_id: int, user_id: int
+    ) -> Optional[Account]:
+        db_account = await self.get_account_by_id(org_id, account_id)
+        if not db_account:
+            return None
+
+        if db_account.is_active:
+            return db_account
+
+        prev_state = db_account.model_dump()
+        db_account.is_active = True
+
+        self.session.add(db_account)
+        await self.session.commit()
+        await self.session.refresh(db_account)
+
+        await log_audit_event(
+            session=self.session,
+            org_id=org_id,
+            user_id=user_id,
+            action="ACTIVATE_ACCOUNT",
+            entity_type="Account",
+            entity_id=str(db_account.id),
+            previous_state=prev_state,
+            new_state=db_account.model_dump(),
+        )
+        await self.session.commit()
+
+        return db_account
+
+    async def deactivate_account(
+        self, org_id: uuid.UUID, account_id: int, user_id: int
+    ) -> Optional[Account]:
+        db_account = await self.get_account_by_id(org_id, account_id)
+        if not db_account:
+            return None
+
+        if not db_account.is_active:
+            return db_account
+
+        prev_state = db_account.model_dump()
+        db_account.is_active = False
+
+        self.session.add(db_account)
+        await self.session.commit()
+        await self.session.refresh(db_account)
+
+        await log_audit_event(
+            session=self.session,
+            org_id=org_id,
+            user_id=user_id,
+            action="DEACTIVATE_ACCOUNT",
+            entity_type="Account",
+            entity_id=str(db_account.id),
+            previous_state=prev_state,
+            new_state=db_account.model_dump(),
+        )
+        await self.session.commit()
+
+        return db_account
+
 
 def get_account_service(session: AsyncSession = Depends(get_session)) -> AccountService:
     return AccountService(session=session)

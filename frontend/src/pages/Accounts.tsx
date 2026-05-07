@@ -7,6 +7,7 @@ import * as z from "zod";
 import { Link } from "react-router-dom";
 import { accountService } from "../services/accountService";
 import { RoleGuard } from "../components/RoleGuard";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 const accountSchema = z.object({
     code: z.string().min(3).max(10),
@@ -19,6 +20,7 @@ type AccountFormValues = z.infer<typeof accountSchema>;
 export default function Accounts() {
     const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [confirmAction, setConfirmAction] = useState<{type: 'activate' | 'deactivate', account: any} | null>(null);
 
     const { data: accountsResponse, isLoading } = useQuery({
         queryKey: ["accounts"],
@@ -37,6 +39,28 @@ export default function Accounts() {
         },
         onError: (err: any) => {
             toast.error(err.response?.data?.detail || "Failed to create account");
+        }
+    });
+
+    const actMutation = useMutation({
+        mutationFn: accountService.activateAccount,
+        onSuccess: () => {
+            toast.success("Account activated successfully");
+            queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to activate account");
+        }
+    });
+
+    const deactMutation = useMutation({
+        mutationFn: accountService.deactivateAccount,
+        onSuccess: () => {
+            toast.success("Account deactivated successfully");
+            queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to deactivate account");
         }
     });
 
@@ -74,6 +98,7 @@ export default function Accounts() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Name</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Type</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
@@ -96,10 +121,20 @@ export default function Accounts() {
                                     </td>
                                     <td className="px-6 py-4 text-sm">
                                         {account.is_active ? (
-                                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">Active</span>
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-medium font-mono">Active</span>
                                         ) : (
-                                            <span className="text-rose-500">Inactive</span>
+                                            <span className="text-rose-500 font-mono">Inactive</span>
                                         )}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm">
+                                        <RoleGuard allowedRoles={['admin', 'accountant']}>
+                                            <button
+                                                onClick={() => setConfirmAction({ type: account.is_active ? 'deactivate' : 'activate', account })}
+                                                className={`text-xs font-medium px-3 py-1 rounded shadow-sm transition ${account.is_active ? 'text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/30 dark:hover:bg-rose-900/50' : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50'}`}
+                                            >
+                                                {account.is_active ? 'Deactivate' : 'Activate'}
+                                            </button>
+                                        </RoleGuard>
                                     </td>
                                 </tr>
                             ))}
@@ -152,6 +187,25 @@ export default function Accounts() {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog 
+                isOpen={!!confirmAction}
+                title={confirmAction?.type === 'activate' ? 'Activate Account' : 'Deactivate Account'}
+                message={confirmAction?.type === 'activate' 
+                    ? `Are you sure you want to activate the account "${confirmAction?.account?.name}" (${confirmAction?.account?.code})?` 
+                    : `Are you sure you want to deactivate the account "${confirmAction?.account?.name}" (${confirmAction?.account?.code})? This will prevent future entries from using this account.`}
+                confirmText={confirmAction?.type === 'activate' ? 'Activate' : 'Deactivate'}
+                type={confirmAction?.type === 'activate' ? 'primary' : 'danger'}
+                onConfirm={() => {
+                    if (!confirmAction) return;
+                    if (confirmAction.type === 'activate') {
+                        actMutation.mutate(confirmAction.account.id);
+                    } else if (confirmAction.type === 'deactivate') {
+                        deactMutation.mutate(confirmAction.account.id);
+                    }
+                }}
+                onCancel={() => setConfirmAction(null)}
+            />
         </div>
     );
 }

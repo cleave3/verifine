@@ -12,6 +12,7 @@ import { trackingService } from "../services/trackingService";
 import { exportToCsv } from "../lib/export";
 import { Download, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import { RoleGuard } from "../components/RoleGuard";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useCurrencyStore } from "../store/currencyStore";
 
 const jeSchema = z.object({
@@ -40,6 +41,7 @@ export default function JournalEntries() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedEntry, setSelectedEntry] = useState<any>(null);
     const [jeToPost, setJeToPost] = useState<any>(null);
+    const [jeToVoid, setJeToVoid] = useState<any>(null);
     const [editingEntry, setEditingEntry] = useState<any>(null);
     const [page, setPage] = useState(1);
 
@@ -100,7 +102,7 @@ export default function JournalEntries() {
             form.reset();
         },
         onError: (err: any) => {
-            toast.error(err.response?.data?.detail || "Failed to create journal entry");
+            toast.error(err.response?.data?.message || "Failed to create journal entry");
         }
     });
 
@@ -140,6 +142,18 @@ export default function JournalEntries() {
         },
         onError: (err: any) => {
             toast.error(err.response?.data?.detail || "Failed to update journal entry");
+        }
+    });
+
+    const voidMutation = useMutation({
+        mutationFn: journalEntryService.voidJournalEntry,
+        onSuccess: () => {
+            toast.success("Journal entry voided successfully");
+            queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
+            setJeToVoid(null);
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || "Failed to void journal entry");
         }
     });
 
@@ -324,7 +338,7 @@ export default function JournalEntries() {
                                                 {je.status}
                                             </span>
                                         </td>
-                                         <td className="px-4 sm:px-6 py-4 text-sm flex items-center gap-3 flex-wrap min-w-[120px]">
+                                        <td className="px-4 sm:px-6 py-4 text-sm flex items-center gap-3 flex-wrap min-w-[120px]">
                                             <button onClick={() => setSelectedEntry(je)} className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded">
                                                 View
                                             </button>
@@ -351,6 +365,9 @@ export default function JournalEntries() {
                                                     </button>
                                                     <button onClick={() => setJeToPost(je)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-medium bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded">
                                                         Post
+                                                    </button>
+                                                    <button onClick={() => setJeToVoid(je)} className="text-rose-600 dark:text-rose-400 hover:text-rose-900 dark:hover:text-rose-300 font-medium bg-rose-50 dark:bg-rose-900/30 px-3 py-1 rounded">
+                                                        Void
                                                     </button>
                                                 </>
                                             )}
@@ -588,17 +605,17 @@ export default function JournalEntries() {
                     <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-md shadow-2xl">
                         <h2 className="text-xl font-bold mb-2 text-slate-900 dark:text-white">Confirm Posting</h2>
                         <p className="text-slate-600 dark:text-slate-300 mb-6">
-                            Are you sure you want to post <strong>{jeToPost.transaction_id}</strong> to the General Ledger? 
+                            Are you sure you want to post <strong>{jeToPost.transaction_id}</strong> to the General Ledger?
                             This action cannot be undone and will affect your financial reports.
                         </p>
                         <div className="flex justify-end gap-3">
-                            <button 
+                            <button
                                 onClick={() => setJeToPost(null)}
                                 className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
                             >
                                 Cancel
                             </button>
-                            <button 
+                            <button
                                 onClick={() => postMutation.mutate(jeToPost.id)}
                                 disabled={postMutation.isPending}
                                 className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition disabled:opacity-50"
@@ -609,6 +626,17 @@ export default function JournalEntries() {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                isOpen={!!jeToVoid}
+                title="Void Journal Entry"
+                message={`Are you sure you want to void journal entry ${jeToVoid?.transaction_id}? This action cannot be undone.`}
+                confirmText="Void Entry"
+                cancelText="Cancel"
+                type="danger"
+                onConfirm={() => voidMutation.mutate(jeToVoid?.id)}
+                onCancel={() => setJeToVoid(null)}
+            />
         </div>
     );
 }
